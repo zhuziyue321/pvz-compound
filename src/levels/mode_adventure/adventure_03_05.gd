@@ -14,7 +14,7 @@ func _init() -> void:
 	## 小僵尸大麻烦:僵尸体型/血量减半、速度翻倍(见 Zombie000Base.update_mini_zombie)
 	can_choosed_card = false
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	1: 2,
 	3: 1,
 	4: 2,
@@ -39,14 +39,14 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 不选卡时相机停留
-	await prefab.wait(3.0)
+	await wait(3.0)
 	## 相机归位
-	await prefab.camera_back()
+	await camera_back()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20, zombie_list)
+	await start_battle(20, zombie_list)

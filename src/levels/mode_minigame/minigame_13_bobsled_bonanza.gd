@@ -73,14 +73,14 @@ func run_flow(mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
+	await init_lawn_mover()
 	## （冰面已经在进关时铺好了，见 init_level_items —— 玩家的阵型要绕着那四条冰面布置，
 	##  想在冰面上种得先拿火爆辣椒融冰）
-	await prefab.ready_set_plant()
+	await ready_set_plant()
 	## 开战（原版 Four flags = 40 波）
-	await prefab.start_battle(40, zombie_list)
+	await start_battle(40, zombie_list)

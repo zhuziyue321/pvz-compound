@@ -61,9 +61,7 @@ func _check_level_05_10(a) -> void:
 		str(para.game_BGM))
 	_check(a, "5-10 是夜晚（寒冰菇等蘑菇不睡觉）", not para.is_day, str(para.is_day))
 	_check(a, "5-10 没有天降阳光", not para.is_day_sun, str(para.is_day_sun))
-	## 夜屋顶是裸屋顶：没有花盆就种不下任何植物，本关开局预置了花盆（关卡数据，不是地图数据）
-	_check(a, "5-10 预置了花盆（裸屋顶的种植位）", para.all_pre_plant_data.size() > 0,
-		str(para.all_pre_plant_data.size()))
+	## 花盆不在关卡数据里了：由 run_flow() 开头的 plant_flower_pot_columns(4) 铺（见 STEP5 实机）
 	## 关卡自己指定地图：僵王关的夜屋顶图不再靠场景槽位反查（见 docs/参考存档/地图实现.md §三）
 	var map_res: ResourceMapData = para.map_data
 	_check(a, "5-10 显式指定 map_data", map_res != null, str(map_res))
@@ -192,6 +190,14 @@ func _check_level_runtime(a) -> bool:
 	var mg = Global.main_game
 	_check(a, "关卡参数已切到夜屋顶", mg.game_para.game_BG == ConstLevelData.GameBg.Boss,
 		str(mg.game_para.game_BG))
+	## 夜屋顶是裸屋顶：没有花盆就种不下任何植物 —— 花盆由 run_flow() 开头「系统种植」铺出来
+	var pot_num := 0
+	for i in range(20):
+		pot_num = _count_pots(mg, 4)
+		if pot_num > 0:
+			break
+		await a.wait(0.5)
+	_check(a, "左侧 4 列铺上了花盆（裸屋顶的种植位）", pot_num == EXPECT_ROW_NUM * 4, str(pot_num))
 	_check(a, "底图 = background6boss",
 		mg.background_manager.background.texture == ConstLevelData.GameBgTextureMap[ConstLevelData.GameBg.Boss],
 		str(mg.background_manager.background.texture))
@@ -289,6 +295,17 @@ func _check_zombie_rows(a, mg) -> void:
 		if rows[i].zombie_row_type != CharacterRegistry.ZombieRowType.Land:
 			wrong += 1
 	_check(a, "僵尸行全是陆地行（Land）", wrong == 0, "非陆地行数=%d" % wrong)
+
+
+## 数场上已铺的花盆：只数左侧 col_count 列的 Down 槽位里的花盆
+func _count_pots(mg, col_count: int) -> int:
+	var num := 0
+	for row_cells in mg.plant_cell_manager.all_plant_cells:
+		for col in range(mini(col_count, row_cells.size())):
+			var pot = (row_cells[col] as PlantCell).get_plant(CharacterRegistry.PlacePlantInCell.Down)
+			if is_instance_valid(pot) and pot.plant_type == CharacterRegistry.PlantType.P034FlowerPot:
+				num += 1
+	return num
 
 
 ## 等主游戏进入 MAIN_GAME 阶段（5-10 没有戴夫对话，不需要点屏幕，只等时间轴自己走完）

@@ -21,7 +21,7 @@ func _init() -> void:
 	## 本关可用僵尸 9 只（原版无尽没有巨人）：卡槽数跟随可用僵尸数
 	## （不写就会退回存档的卡槽数，多余的僵尸卡会被丢弃）
 	max_choosed_card_num = 9
-	pre_choosed_card_list_zombie.assign([25, 3, 4, 5, 21, 18, 22, 8, 9])
+	prechosen_cards = ResourceCardReference.create_zombie_list([25, 3, 4, 5, 21, 18, 22, 8, 9])
 	is_zombie_mode = true
 	## 原版本关的纸板植物 19 种: 大混战那 14 种去掉高坚果(24)，
 	## 再加 双发射手(8) / 小喷菇(9) / 地刺(22) / 火炬树桩(23) / 伞叶(38)
@@ -60,13 +60,13 @@ func _init() -> void:
 func run_flow(mg: MainGameManager) -> void:
 	if mg.curr_game_round == 1:
 		## 保龄球红线（仅第 1 轮）
-		await prefab.bowling_stripe()
+		await bowling_stripe()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(-1, [
+	await start_battle(-1, [
 		CharacterRegistry.ZombieType.Z003Cone,
 		CharacterRegistry.ZombieType.Z004PoleVaulter,
 		CharacterRegistry.ZombieType.Z005Bucket,

@@ -47,6 +47,20 @@ func set_choose_level(curr_game_mode: MainSceneRegistry.MainScenes, curr_level_p
 ## 只会让玩家一进关就跳到第 N 批罐子（玩家以为自己什么都没干），原版也是每次从头砸
 @export var is_save_multi_round_data := true
 
+## 本关使用的**场景名**（取值见 SceneSettingRegistry.SCENE_*，如 SceneSettingRegistry.SCENE_FOG）
+## 非空 = 本场景的**具体信息**（主游戏槽位 / 底图 / BGM / 雾 / 昼夜 / 天降阳光）由那一份
+## 场景脚本给出（见 SceneSettingBase），关卡脚本不用再逐项抄一遍。
+## **在赋值那一刻就套用**，所以写在它后面的同名字段就是「覆盖」—— 这是关卡改场景设置的工具：
+##   func _init() -> void:
+##       scene_name = SceneSettingRegistry.SCENE_FRONT_DAY
+##       game_BGM = ConstLevelData.GameBGM.MiniGame  ## 冒险 1-5：前院场景，但播小游戏曲
+## 覆盖项多 / 要按运行时条件改时，改为覆写 apply_scene_setting()
+## 留空 = 不套用场景设置，各字段照旧自己写（老关卡 / 自制关不受影响，行为与原来完全一致）
+@export var scene_name: StringName = &"":
+	set(value):
+		scene_name = value
+		apply_scene_setting()
+
 @export_group("关卡背景参数")
 ## 本关卡使用的地图数据：格子、僵尸行、小推车类型全由它决定（见 docs/参考存档/地图实现.md）
 ## 留空时按 game_sences 取场景默认地图
@@ -81,8 +95,28 @@ func set_choose_level(curr_game_mode: MainSceneRegistry.MainScenes, curr_level_p
 func has_camera_init_x() -> bool:
 	return not is_nan(camera_init_x)
 
-@export_subgroup("预种植植物(从1开始,0为整行或整列)")
-@export var all_pre_plant_data: Array[PrePlantResource] = []
+## 套用 scene_name 对应的场景设置 —— **关卡脚本可覆写**
+## 场景脚本给出这个场景的具体信息（槽位 / 底图 / BGM / 雾 / 昼夜 / 天降阳光），
+## 由 scene_name 的 setter 在**赋值那一刻**调用，所以关卡脚本写在 scene_name 之后的
+## 同名字段即为覆盖（单项覆盖用那一条就够，不必覆写本方法）。
+## 需要按运行时条件改 / 覆盖项较多时才覆写：
+##   func apply_scene_setting() -> void:
+##       super.apply_scene_setting()
+##       game_BGM = ConstLevelData.GameBGM.NoBGM
+## 雨 / 闪电（is_rain / is_lightning）是关卡级天气开关，不在场景里，关卡自己写。
+## scene_name 为空时什么都不做（老关卡 / 自制关照旧）。
+func apply_scene_setting() -> void:
+	if scene_name == &"":
+		return
+	var setting := SceneSettingRegistry.get_scene(scene_name)
+	if setting == null:
+		return
+	game_sences = setting.game_sences
+	game_BG = setting.game_BG
+	game_BGM = setting.game_BGM
+	is_fog = setting.is_fog
+	is_day = setting.is_day
+	is_day_sun = setting.is_day_sun
 
 #endregion
 
@@ -103,8 +137,6 @@ func has_camera_init_x() -> bool:
 @export var crazy_dave_dialog_next_round: Array[CrazyDaveDialogResource] = []
 ## 开场戴夫对话是否只在首次通关前播放（原版：进入夜晚场景 2-1 的这段话只说一次）
 @export var dave_dialog_only_first_playthrough: bool = false
-## 新手教程数据:不为空时本关是教程关(原版:冒险模式 1-1),流程见 TutorialManager
-@export var tutorial_data: ResourceTutorialData
 
 @export_subgroup("关卡时间轴")
 ## 关卡时间轴:按顺序执行的关卡事件(戴夫对话 / 选卡 / 开战 / 一波…),见 ResourceLevelTimelineData
@@ -133,7 +165,8 @@ func has_camera_init_x() -> bool:
 @export var zombie_multy := 1
 ## 每轮游戏出怪波次，每10波生成1旗帜
 @export var max_wave := 30
-## 开局到第一波僵尸的延迟秒数（教程关由教程管理器接管，不读本值）
+## 开局到第一波僵尸的延迟秒数（「开战」事件里等这个秒数再开第一波；
+## 关卡流程要提前开波就用 `await start_first_wave()`，不读本值）
 @export var first_wave_delay: float = 20.0
 ## 僵尸种类刷新列表 多轮游戏且自然出怪 自动更新自然出怪列表
 @export var zombie_refresh_types: Array[CharacterRegistry.ZombieType] = [
@@ -147,15 +180,6 @@ func has_camera_init_x() -> bool:
 @export var is_bungi := false
 ## 大波时生成的蹦极僵尸数量范围
 @export var range_num_bungi: Vector2i = Vector2i(3, 5)
-
-@export_subgroup("僵王关（僵王博士 Dr. Zomboss）")
-## 是否开启僵王战（冒险 5-10）：开启后本关**不自然出怪**（monster_mode 配 Null），
-## 僵尸全部由僵王自己放出来，胜利条件从「打完最后一波」变成「打死僵王」。
-## 本体与出招编排见 src/entities/character/zombie/zombie_boss.gd，
-## **僵王由关卡流程自己放进场**：run_flow() 里 `await prefab.spawn_zomboss()`
-## （见 src/levels/core/timeline_event/level_timeline_event_spawn_zomboss.gd，血条也由该事件挂上）。
-## 注：能不能打到僵王不是本开关的事 —— 那是僵王自己的声明（`ZombossBoss.is_range_detectable`）。
-@export var is_zomboss_fight := false
 
 @export_subgroup("锤僵尸出怪模式（需调整对应墓碑参数）")
 ## 墓碑出怪倍率
@@ -196,6 +220,7 @@ func has_camera_init_x() -> bool:
 #region 卡片参数
 @export_group("卡片参数")
 ## 卡槽模式，只有Norm可以选卡
+## Both = 卡槽（选卡）+ 传送带同时出现，卡槽在上、传送带在下（见 docs/参考存档/卡槽与传送带.md）
 @export var card_mode: ConstLevelData.E_CardMode = ConstLevelData.E_CardMode.Norm
 ## 是否有种子雨
 @export var is_seed_rain := false
@@ -206,9 +231,9 @@ func has_camera_init_x() -> bool:
 @export_range(0, 15) var max_choosed_card_num: int = 0
 ## 开始阳光数量
 @export var start_sun: int = 50
-## 预选卡片列表、预选卡片不能在选卡时取消
-@export var pre_choosed_card_list_plant: Array[CharacterRegistry.PlantType] = []
-@export var pre_choosed_card_list_zombie: Array[CharacterRegistry.ZombieType] = []
+## 系统预选卡片，按列表顺序入槽；预选卡不能在选卡时取消。
+## 植物、普通僵尸、僵王共用这一个列表（旧版本是「植物列表 + 僵尸列表按下标配对」的两份结构）。
+@export var prechosen_cards: Array[ResourceCardReference] = []
 ## 本关禁选的植物：这些卡在选卡界面**整张不出现**（原版迷你游戏「坚不可摧」：
 ## 阳光生产类向日葵 / 阳光菇 / 双子向日葵 与免费植物小喷菇 / 海蘑菇都不能带，
 ## 本关没有阳光收入，全靠开局那笔阳光和每波补给）。
@@ -221,17 +246,44 @@ func has_camera_init_x() -> bool:
 var is_locked_card_slot := false
 
 @export_subgroup("传送带卡片参数")
-@export var all_card_plant_type_probability: Dictionary[CharacterRegistry.PlantType, int]
-@export var all_card_zombie_type_probability: Dictionary[CharacterRegistry.ZombieType, int]
-@export var card_order_plant: Dictionary[int, CharacterRegistry.PlantType] = {}
-@export var card_order_zombie: Dictionary[int, CharacterRegistry.ZombieType] = {}
+## 传送带随机卡片与相对权重；权重为 0 的条目不参与抽取。
+@export var conveyor_weights: Array[ResourceCardWeight] = []
+## 固定顺序的传送带卡片；键为从 0 开始的生成序号，未指定的序号走随机池。
+@export var conveyor_order: Dictionary[int, ResourceCardReference] = {}
 @export var create_new_card_speed: float = 1
 
 @export_subgroup("种子雨卡片参数")
-@export var all_card_plant_type_probability_seed_rain: Dictionary[CharacterRegistry.PlantType, int]
-@export var all_card_zombie_type_probability_seed_rain: Dictionary[CharacterRegistry.ZombieType, int]
-@export var card_order_plant_seed_rain: Dictionary[int, CharacterRegistry.PlantType] = {}
-@export var card_order_zombie_seed_rain: Dictionary[int, CharacterRegistry.ZombieType] = {}
+## 种子雨随机卡片与相对权重；与传送带配置相互独立。
+@export var seed_rain_weights: Array[ResourceCardWeight] = []
+## 固定顺序的种子雨卡片；键为从 0 开始的生成序号，未指定的序号走随机池。
+@export var seed_rain_order: Dictionary[int, ResourceCardReference] = {}
+
+@export_subgroup("僵王参数")
+## 自动出场僵王类型；Null 表示关闭自动出场，不限制卡牌召唤
+@export var boss_type: CharacterRegistry.ZombieBossType = CharacterRegistry.ZombieBossType.Null
+## 自动出场波次：0 为开战生成，1..max_wave 为指定波次生成
+@export var boss_spawn_wave: int = 0
+## 僵王初始血量；0 表示沿用僵王场景自带的上限（默认 40000）。
+## 机甲破损阈值按新上限与场景上限的比例同步缩放，保持各关一致的破损观感。
+@export var boss_hp: int = 0
+## 僵王出生点固定在 ZB000Base.FIXED_SPAWN_POSITION（800x600 标定值），关卡不再配置
+## 开启额外的「僵王全部死亡即胜利」条件，与自动出场是否配置独立
+@export var win_on_boss_death := false
+#endregion
+
+## 本关是否配置了自动出场的僵王
+func has_boss() -> bool:
+	return boss_type != CharacterRegistry.ZombieBossType.Null
+
+## 本关有没有常规卡槽（选卡界面 / 出战卡槽）；Both 模式下也有
+func has_norm_card_slot() -> bool:
+	return card_mode == ConstLevelData.E_CardMode.Norm \
+		or card_mode == ConstLevelData.E_CardMode.Both
+
+## 本关有没有传送带；Both 模式下也有
+func has_conveyor_belt() -> bool:
+	return card_mode == ConstLevelData.E_CardMode.ConveyorBelt \
+		or card_mode == ConstLevelData.E_CardMode.Both
 
 @export_subgroup("种植参数")
 ## 是否有铲子
@@ -314,13 +366,12 @@ var ori_data_on_save_data_update: Dictionary = {}
 var save_game_data_main_game: ResourceSaveGameMainGame
 
 ## 游戏开始会根据参数初始化一些硬性的参数。
-## 卡槽: 传送带禁止选卡、禁止天降阳光。预选卡用 0 补全。
+## 卡槽: 传送带禁止选卡、禁止天降阳光。
 ## 出怪: 正常模式下刷新列表会按白名单过滤；禁止在列表中写 Z021Bungi，应使用 is_bungi。
 func init_para() -> void:
 	resolve_map_data()
 	_apply_card_mode_constraints()
 	_resolve_adventure_locked_cards()
-	_pad_prechosen_cards()
 	_init_zombie_refresh_from_whitelist()
 	## 罐子配置：先恢复第 1 批的原始配置（上次玩到后面几批时顶层字段被改过），再重新快照
 	reset_pot_config_first_round()
@@ -333,12 +384,14 @@ func init_para() -> void:
 
 func _apply_card_mode_constraints() -> void:
 	match card_mode:
-		ConstLevelData.E_CardMode.Norm:
+		ConstLevelData.E_CardMode.Norm, ConstLevelData.E_CardMode.Both:
 			pass
 		ConstLevelData.E_CardMode.ConveyorBelt:
+			## 只有「纯传送带」才禁选卡 / 关天降阳光：
+			## Both 模式有常规卡槽，出战卡照样由选卡决定，阳光也按关卡自己的配置走
 			can_choosed_card = false
 			is_day_sun = false
-	if card_mode != ConstLevelData.E_CardMode.Norm and can_choosed_card:
+	if not has_norm_card_slot() and can_choosed_card:
 		Log.debug("warning: 当前卡槽模式无法选卡, 已修改选卡为false")
 		can_choosed_card = false
 
@@ -362,49 +415,32 @@ func _resolve_adventure_locked_cards() -> void:
 	is_locked_card_slot = false
 	if game_mode != MainSceneRegistry.MainScenes.ChooseLevelAdventure:
 		return
-	if not can_choosed_card or card_mode != ConstLevelData.E_CardMode.Norm:
+	if not can_choosed_card or not has_norm_card_slot():
 		return
-	pre_choosed_card_list_plant.clear()
-	pre_choosed_card_list_zombie.clear()
+	prechosen_cards.clear()
 	var owned_cards: Array[CharacterRegistry.PlantType] = Global.global_game_state.curr_plant
 	if owned_cards.is_empty():
 		return
 	if get_max_choosed_card_num() < owned_cards.size():
 		return
-	pre_choosed_card_list_plant.assign(owned_cards)
+	prechosen_cards = ResourceCardReference.create_plant_list(owned_cards)
 	is_locked_card_slot = true
 	Log.debug(str("冒险关卡锁定卡槽: 卡槽数") + str(get_max_choosed_card_num()) \
 		+ str(" >= 拥有植物卡数") + str(owned_cards.size()) + str(",按顺序固定选卡"))
 
 
-func _pad_prechosen_cards() -> void:
-	if pre_choosed_card_list_plant.size() < get_max_choosed_card_num():
-		GlobalUtils.pad_array(pre_choosed_card_list_plant, get_max_choosed_card_num(), 0)
-	if pre_choosed_card_list_zombie.size() < get_max_choosed_card_num():
-		GlobalUtils.pad_array(pre_choosed_card_list_zombie, get_max_choosed_card_num(), 0)
-	Log.debug(str("预选卡植物:") + str(pre_choosed_card_list_plant))
-	Log.debug(str("预选卡僵尸:") + str(pre_choosed_card_list_zombie))
-
-
 ## 卡槽数在关卡运行期发生变化时(夜晚关卡开场戴夫卖出卡槽扩充)重新结算预选卡
-## 卡槽数变大可能让"锁定卡槽"失效(已拥有植物卡数 <= 新的卡槽数),
-## 而预选卡列表也要重新补齐到新的卡槽数,所以要重跑这一对函数,不要只改卡槽数
+## 卡槽数变大可能让"锁定卡槽"失效(已拥有植物卡数 <= 新的卡槽数),所以要重跑一次
 func refresh_pre_choosed_card_on_card_slot_change() -> void:
 	_resolve_adventure_locked_cards()
-	_pad_prechosen_cards()
 
 
 ## 系统预选卡的有效数量
-## _pad_prechosen_cards() 会把列表用 Null(0) 补齐到 max_choosed_card_num,
-## 所以不能直接用 size() 判断,必须数非 Null 的槽位
-## 植物/僵尸两个列表按下标成对消费(见 card_slot_norm.init_pre_choosed_card),
-## 一个下标最多产生一张卡,所以取两表的公共长度
+## 列表里可能夹着空引用或未注册的引用(关卡脚本手写 / 冒险模式未解锁),必须逐个判断
 func get_valid_pre_choosed_card_num() -> int:
 	var valid_num := 0
-	var pair_num: int = mini(pre_choosed_card_list_plant.size(), pre_choosed_card_list_zombie.size())
-	for i in range(pair_num):
-		if pre_choosed_card_list_plant[i] != CharacterRegistry.PlantType.Null \
-			or pre_choosed_card_list_zombie[i] != CharacterRegistry.ZombieType.Null:
+	for card_reference in prechosen_cards:
+		if card_reference != null and card_reference.is_valid() and AllCards.is_battle_card(card_reference):
 			valid_num += 1
 	return valid_num
 
@@ -432,34 +468,6 @@ func is_no_choose_permission() -> bool:
 	return get_valid_pre_choosed_card_num() >= get_max_choosed_card_num()
 
 
-## 本关是否配置了新手教程(原版:冒险模式 1-1 是教程关)
-func is_tutorial() -> bool:
-	return has_tutorial()
-
-
-## 本关的教程数据 —— **关卡脚本可覆写**
-## 默认取资源字段 tutorial_data（老 .tres 关卡不受影响）；
-## 关卡脚本把教程放在 run_flow() 里现场构造时（await prefab.tutorial(数据)），
-## 这里返回 null 也没关系：数据由教程事件直接交给 TutorialManager，
-## 但脚本要覆写 has_tutorial() 声明「本关有教程」，供创建 / 跳过判定用
-## （见 MainGameManager.init_tutorial_manager / setup_tutorial_manager）
-func get_tutorial_data() -> ResourceTutorialData:
-	return tutorial_data
-
-
-## 本关有没有新手教程 —— **关卡脚本可覆写**
-## 教程数据在 run_flow() 里现场构造时，脚本覆写返回 true
-func has_tutorial() -> bool:
-	return get_tutorial_data() != null
-
-
-## 本关任意一轮有没有戴夫对话 —— **关卡脚本可覆写**
-## 对话数据在 run_flow() 里现场构造时（await prefab.dave_dialog(对话)），
-## 脚本覆写返回 true，供「有对话就不播戴夫推销」判定用（见 is_dave_sell_possible）
-func has_dave_dialog() -> bool:
-	return has_dave_dialog_on_any_round()
-
-
 ## 第 round_index 轮(1 起)开场要播的戴夫对话，没有则返回 null。
 ## 第 1 轮就是 crazy_dave_dialog；第 2 轮起取 crazy_dave_dialog_next_round
 ## (原版冒险 4-5:砸完一批罐子后戴夫再摆一批，同时说一段话)
@@ -481,19 +489,16 @@ func has_dave_dialog_on_any_round() -> bool:
 	return false
 
 
-## 本关有没有「开场教程」（在预览僵尸之前跑完的那种，见 TutorialManager.is_opening_tutorial）
-## 没有的话「开场新手教程」事件是空转；普通教程（1-1 / 1-2）是进 MAIN_GAME 之后才跑的，不占这条轴
-func is_opening_tutorial_level() -> bool:
-	var data := get_tutorial_data()
-	return data != null and data.is_opening_tutorial
-
-
 ## 本关**有没有可能**出现戴夫推销卡槽扩充（只按关卡数据静态判断）
-## 运行时还要看商店是否解锁 / 卡槽是否已满 / 金币够不够（见 DaveSellManager.is_can_sell），
-## 这里只排掉「本关永远不可能推销」的情况
+## 运行时还要看卡槽是否已满 / 金币够不够（见 DaveSellManager.is_can_sell），
+## 这里只排掉「本关永远不可能推销」的情况。
+## **推销写不写在本关流程里是关卡脚本的事**（run_flow 开头 `await dave_sell_card_slot()`），
+## 本关有戴夫对话时就别写那一句，免得开场连播两段戴夫。
 func is_dave_sell_possible() -> bool:
-	## 关卡配了戴夫对话：以关卡对话为准，不再推销（免得一关开场连播两段戴夫）
-	if has_dave_dialog():
+	## 商店已解锁（通关 3-4 拿到车钥匙）：卡槽扩充改由商店出售，戴夫不再开场推销
+	## —— 与 DaveSellManager.is_can_sell() 里的同一判据互为保险：这里先挡一道，
+	## 关卡脚本那句快捷工具整句空转，连推销事件都不会创建
+	if Global.global_game_state.is_shop_unlocked():
 		return false
 	## 只有冒险模式的出战卡槽吃商店 / 推销的扩充
 	if game_mode != MainSceneRegistry.MainScenes.ChooseLevelAdventure:
@@ -544,8 +549,6 @@ func build_default_timeline() -> ResourceLevelTimelineData:
 	## 对话内容取关卡当轮的对话(第 1 轮 crazy_dave_dialog,之后 crazy_dave_dialog_next_round)
 	if has_dave_dialog_on_any_round():
 		_append_timeline_event(data, LevelTimelineEventDaveDialog.new(), "关卡戴夫对话")
-	if is_opening_tutorial_level():
-		_append_timeline_event(data, LevelTimelineEventTutorial.new(), "开场新手教程", true)
 	if is_bowling_stripe:
 		_append_timeline_event(data, LevelTimelineEventBowlingStripe.new(), "保龄球红线", true)
 	if look_show_zombie:
@@ -774,7 +777,7 @@ func update_data_with_save_game_data() -> void:
 			save_game_data_main_game = res
 			Log.debug(str("加载关卡数据存档成功：") + str(path))
 		else:
-			push_error("加载的资源类型不对: “%s” 不是 ResourceSaveGameMainGame" % path)
+			Log.error("加载的资源类型不对: “%s” 不是 ResourceSaveGameMainGame" % path)
 			save_game_data_main_game = null
 	else:
 		Log.debug(str("关卡数据存档不存在：") + str(path))
@@ -792,7 +795,7 @@ func delete_game_data():
 			Log.debug(str("删除存档成功：") + str(path))
 			return true
 		else:
-			push_error("删除存档失败: %s 错误码 %d" % [path, err])
+			Log.error("删除存档失败: %s 错误码 %d" % [path, err])
 			return false
 
 #region 自然刷怪过滤

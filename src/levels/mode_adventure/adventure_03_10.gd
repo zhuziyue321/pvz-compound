@@ -13,7 +13,7 @@ func _init() -> void:
 	is_day_sun = false
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
 	## 传送带卡池(原版 3-10): 莲叶17 / 三线19 / 水草20 / 辣椒21 / 地刺22 / 火炬树桩23 / 高坚果24
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	17: 2,
 	19: 2,
 	20: 2,
@@ -37,12 +37,12 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(-1, zombie_list)
+	await start_battle(-1, zombie_list)

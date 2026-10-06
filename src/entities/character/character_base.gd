@@ -314,7 +314,10 @@ func be_ice_freeze(time:float, new_time_ice_end_decelerate:float):
 	## 冰冻效果
 	ice_effect = SceneRegistry.ICE_EFFECT.instantiate()
 	add_child(ice_effect)
-	ice_effect = ice_effect
+	# 冰块对齐影子：角色根节点未必是可见躯干的位置（僵王的部件整体偏在根节点右侧，
+	# 直接用根节点会把冰块放到屏幕外）。
+	if is_instance_valid(shadow):
+		ice_effect.global_position = shadow.global_position
 	ice_effect.start_ice_effect(time)
 
 ## 冰冻控制计时器结束
@@ -338,3 +341,13 @@ func cancel_ice():
 		_on_ice_decelerate_timer_timeout()
 
 #endregion
+
+
+## 宿主所在的「同层容器」：水花、尸块、掉落物这类不属于本角色子树、
+## 但必须站在同一层共享坐标系的节点挂到这里。
+##
+## 组件不要用 owner.get_parent() 去猜宿主的父节点 —— 那等于组件知道了宿主被挂在谁下面，
+## 宿主一旦换容器（被临时挂到别的 Helper 节点下）就会挂错地方、坐标也全偏。
+## 想要「宿主那一层」就问宿主，由宿主决定它自己属于哪一层（硬约束 1-2）。
+func get_sibling_layer() -> Node:
+	return get_parent()

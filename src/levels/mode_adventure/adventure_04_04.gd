@@ -6,12 +6,8 @@ extends LevelScriptBase
 
 
 func _init() -> void:
-	game_sences = MainSceneRegistry.MainScenes.MainGameBack
-	game_BG = ConstLevelData.GameBg.Fog
-	game_BGM = ConstLevelData.GameBGM.Fog
-	is_fog = true
-	is_day = false
-	is_day_sun = false
+	## 场景：泳池·浓雾 —— 槽位 / 底图 / BGM / 雾 / 昼夜 / 天降阳光全由场景脚本给出
+	scene_name = SceneSettingRegistry.SCENE_FOG
 	drop_unlock_on_level_complete = true
 	drop_unlock_tip = "你找到了戴夫的玉米卷，商店上架了新商品！"
 	drop_unlock_icon = preload("res://assets/image/main_game_item/Taco.png")
@@ -27,12 +23,12 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20, zombie_list)
+	await start_battle(20, zombie_list)

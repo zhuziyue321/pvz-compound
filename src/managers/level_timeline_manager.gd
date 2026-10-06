@@ -4,7 +4,7 @@ class_name LevelTimelineManager
 ##
 ## 两种关卡形态（迁移期并存）：
 ##   · **关卡脚本**（LevelScriptBase，新形态）：await 它的 run_flow()，
-##     流程是一段顺序结构的程序，用 await 串起预制体（见 LevelPrefabs）。
+##     流程是一段顺序结构的程序，用 await 串起基类上的流程方法（见 LevelScriptBase）。
 ##   · **老 .tres 关卡**（ResourceLevelData）：按时间轴的事件数组顺序 await 每个事件
 ##     （一种事件 = 一个脚本，本驱动器不认识任何具体事件类型）。
 ##
@@ -69,7 +69,7 @@ func run_timeline() -> void:
 		await _run_event_array(para.get_timeline())
 
 
-## 跑关卡脚本：注入预制体门面后 await 它的 run_flow()
+## 跑关卡脚本：注入主游戏后 await 它的 run_flow()
 func _run_level_script(level_script: LevelScriptBase) -> void:
 	if level_script.is_one_shot_flow:
 		## 整关只跑一遍：第一轮启动后跨轮继续往下跑，后续轮的调用直接跳过
@@ -84,8 +84,8 @@ func _run_level_script(level_script: LevelScriptBase) -> void:
 	is_running = true
 	signal_timeline_started.emit()
 
-	## 预制体门面在这里注入：关卡脚本直接写 await prefab.xxx()，不用自己 new
-	level_script.prefab = LevelPrefabs.new(main_game)
+	## 主游戏在这里注入：关卡脚本的流程方法（await show_zombie() …）靠它拿主游戏
+	level_script._mg = main_game
 	curr_event_index = 0
 	signal_event_changed.emit(0)
 	await level_script.run_flow(main_game)

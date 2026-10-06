@@ -14,6 +14,8 @@ var second_last_picked: Array[int] = []
 var lane_protect_time_left: Array[float] = []
 
 var curr_type: CharacterRegistry.ZombieRowType = CharacterRegistry.ZombieRowType.Land
+## 是否完成行配置初始化；僵王的私有选行系统据此避免每次技能都重置历史。
+var is_initialized: bool = false
 ## 基础权重之和
 var total_base_weight :float= 0
 var total_base_weight_all_type :Dictionary[CharacterRegistry.ZombieRowType, float]
@@ -35,16 +37,22 @@ func _ensure_row_history_size(row_num: int) -> void:
 	second_last_picked.resize(row_num)
 
 
-## 初始化系统
-func init_zombie_choose_row_system():
-	var row_num := get_row_num()
+## 初始化系统；[param zombie_rows] 为空时回退到当前关卡的僵尸行（僵王技能会显式传入）。
+func init_zombie_choose_row_system(zombie_rows: Array = []):
+	var all_rows: Array = zombie_rows
+	if all_rows.is_empty():
+		all_rows = Global.main_game.zombie_manager.all_zombie_rows if (
+			Global.main_game != null and Global.main_game.zombie_manager != null
+		) else []
+	var row_num := all_rows.size()
 	if row_num <= 0:
 		Log.error("初始化僵尸选行系统失败：当前关卡没有僵尸行")
+		is_initialized = false
 		return
 	var ori_weight_land:Array[float] = []
 	var ori_weight_pool:Array[float] = []
 	var ori_weight_both:Array[float] = []
-	for zombie_row_node: ZombieRow in Global.main_game.zombie_manager.all_zombie_rows:
+	for zombie_row_node: ZombieRow in all_rows:
 		var weight_land := 0.0
 		var weight_pool := 0.0
 		## 两栖僵尸（自身行类型 Both）在所有「能出怪」的行上一视同仁，
@@ -81,6 +89,7 @@ func init_zombie_choose_row_system():
 	for i in base_weigth_all_type.keys():
 		total_base_weight_all_type[i] = GlobalUtils.sum_arr(base_weigth_all_type[i])
 
+	is_initialized = true
 	## 丢车保护：小推车触发时由 LawnMover 推送
 	EventBus.subscribe("lawn_mover_triggered", on_lawn_mover_triggered)
 	set_process(true)

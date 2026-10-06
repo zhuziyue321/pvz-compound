@@ -5,18 +5,27 @@ class_name CardManager
 @onready var card_slot_container: PanelContainer = %CardSlotContainer
 @onready var canvas_layer_card_slot_front: CanvasLayer = %CanvasLayerCardSlotFront
 
-## 普通卡槽
+## 常规卡槽控制器（选卡 / 出战卡槽）：出战卡由玩家选卡决定
+var card_slot_controller: CardSlotController
+## 传送带控制器（出卡权重 / 出卡间隔 / 查询带上的卡）
+var conveyor_controller: ConveyorBeltController
+
+## 下面三个是控制器里的实例，留着给外部（教程 / 结算）照旧读；本管理器不再直接操作它们
+## 常规卡槽
 var card_slot_norm: CardSlotNorm
 var card_slot_battle:CardSlotBattle
-## 普通卡槽是否已出现
-var is_norm_appeared:=false
-
 ## 传送带卡槽
 var card_slot_conveyor_belt: CardSlotConveyorBelt
 ## 传送带是否已启动（教程关会晚一步启动，避免重复启动）
 var is_conveyor_belt_started := false
 
 var card_mode:ConstLevelData.E_CardMode
+
+## 传送带出卡间隔倍率：1 = 关卡原始间隔，0.5 = 间隔减半（出卡速度翻倍）
+## 关卡脚本可在任意阶段设置：传送带已建好当场生效，还没建好则在 init_manager() 里补一次
+var conveyor_card_interval_scale :float = 1.0
+## 传送带出卡间隔（秒）；正数时按秒直接覆盖，优先于上面的倍率；非正数表示只用倍率
+var conveyor_card_interval :float = 0.0
 
 ## 当前临时卡片
 var curr_temp_cards:Array[Card]
@@ -46,40 +55,88 @@ func _on_hand_card_release(curr_card:Card):
 
 func init_manager() -> void:
 	self.card_mode = game_para.card_mode
-	match self.card_mode:
-		ConstLevelData.E_CardMode.Norm:
-			card_slot_norm = load("res://src/ui/card/card_slot/card_slot_norm.tscn").instantiate()
-			card_slot_root.add_child(card_slot_norm)
-			card_slot_norm.init_card_slot_norm(game_para)
-			card_slot_battle = card_slot_norm.card_slot_battle
-			card_slot_root.curr_cards = card_slot_battle.curr_cards
+	## 两个控制器都建：关卡要哪个就由控制器自己判断（create() 内部按关卡数据决定），
+	## 卡槽模式 Both 时两个都会建出来 —— 卡槽在上、传送带在下
+	card_slot_controller = CardSlotController.new()
+	card_slot_controller.name = "CardSlotController"
+	add_child(card_slot_controller)
+	card_slot_controller.setup(self)
+	card_slot_controller.create()
 
-		ConstLevelData.E_CardMode.ConveyorBelt:
-			card_slot_conveyor_belt = load("res://src/ui/card/card_slot/card_slot_conveyor_belt.tscn").instantiate()
-			card_slot_root.add_child(card_slot_conveyor_belt)
-			card_slot_conveyor_belt.init_card_slot_conveyor_belt(game_para)
-			card_slot_root.curr_cards = card_slot_conveyor_belt.curr_cards
+	conveyor_controller = ConveyorBeltController.new()
+	conveyor_controller.name = "ConveyorBeltController"
+	add_child(conveyor_controller)
+	conveyor_controller.setup(self)
+	conveyor_controller.create()
+
+	## 外部（教程 / 结算）照旧读这几个字段
+	card_slot_norm = card_slot_controller.card_slot_norm
+	card_slot_battle = card_slot_controller.card_slot_battle
+	card_slot_conveyor_belt = conveyor_controller.card_slot_conveyor_belt
+	## 建好之后补一次：关卡在 run_flow 之前设过的间隔在这里生效
+	_apply_conveyor_card_interval()
+
+#region 传送带出卡 / 权重
+## 挂一条传送带权重规则（每次出卡前按场上情况调权重，见 ConveyorWeightRule）
+func add_conveyor_weight_rule(rule: ConveyorWeightRule) -> void:
+	if conveyor_controller == null:
+		Log.warn("CardManager：传送带控制器还没建好，权重规则已忽略（本关没有传送带？）")
+		return
+	conveyor_controller.add_weight_rule(rule)
+
+
+## 查询传送带上的植物种类（去重）；没有传送带时返回空数组
+func get_conveyor_card_plant_types() -> Array[CharacterRegistry.PlantType]:
+	if conveyor_controller == null:
+		return []
+	return conveyor_controller.get_card_plant_types()
+
+
+## 查询传送带上某种植物的张数
+func count_conveyor_card(plant_type: CharacterRegistry.PlantType) -> int:
+	if conveyor_controller == null:
+		return 0
+	return conveyor_controller.count_card(plant_type)
+
+
+#region 传送带出卡间隔
+## 按倍率调整传送带出卡间隔：1 恢复关卡原始间隔，0.5 表示间隔减半（出卡速度翻倍）。[br]
+## 非传送带关卡或传送带尚未创建时只记录数值，等 init_manager() 补上；非法值告警并忽略。
+func set_conveyor_card_interval_scale(scale: float) -> void:
+	if not is_finite(scale) or scale <= 0.0:
+		Log.warn("CardManager：传送带出卡间隔倍率必须是正数，收到 %s，本次设置已忽略" % str(scale))
+		return
+	conveyor_card_interval_scale = scale
+	_apply_conveyor_card_interval()
+
+## 直接指定传送带出卡间隔（秒）；正数才生效，优先于倍率设置。[br]
+## 与倍率接口同一套延迟生效机制：传送带还没建好就先记着。
+func set_conveyor_card_interval(interval: float) -> void:
+	if not is_finite(interval) or interval <= 0.0:
+		Log.warn("CardManager：传送带出卡间隔必须是正数，收到 %s，本次设置已忽略" % str(interval))
+		return
+	conveyor_card_interval = interval
+	_apply_conveyor_card_interval()
+
+## 把管理器这边记录的间隔设置落到传送带上；间隔按秒优先，其次才是倍率
+func _apply_conveyor_card_interval() -> void:
+	if conveyor_controller == null or not conveyor_controller.has_conveyor_belt():
+		return
+	if conveyor_card_interval > 0.0:
+		conveyor_controller.set_card_interval(conveyor_card_interval)
+	else:
+		conveyor_controller.set_card_interval_scale(conveyor_card_interval_scale)
+#endregion
 
 ## 出战卡槽补一格:夜晚关卡开场戴夫卖出卡槽扩充后,本关的卡槽数要当场 +1
 ## (戴夫对话发生在 init_manager() 之后,出战卡槽占位已经按旧卡槽数建好了)
 func add_one_battle_card_placeholder() -> void:
-	match card_mode:
-		ConstLevelData.E_CardMode.Norm:
-			if card_slot_norm != null:
-				card_slot_norm.card_slot_battle.add_one_card_placeholder()
-		_:
-			pass
+	card_slot_controller.add_one_battle_card_placeholder()
 
 ## 开始下一轮游戏更新卡片管理器
 func start_next_game_card_manager_update():
 	## 铲子（手持物）界面由 HandManager 依据主游戏阶段统一刷新，这里不再直接改显隐
-	match self.card_mode:
-		ConstLevelData.E_CardMode.Norm:
-			card_slot_battle.reparent(card_slot_norm)
-			card_slot_battle.start_next_game_card_slot_battle_update()
-
-		ConstLevelData.E_CardMode.ConveyorBelt:
-			pass
+	card_slot_controller.start_next_game_update()
 	## 罐子模式没有出战卡槽，卡片全是罐子里开出来的临时卡片：
 	## 切换批次时上一批没用完的卡片一起清掉（原版冒险 4-5 每批重新开始）
 	if game_para.is_pot_mode:
@@ -88,31 +145,18 @@ func start_next_game_card_manager_update():
 
 ## 卡槽出现(选卡)
 func card_slot_appear_choose():
-	is_norm_appeared = true
-	card_slot_norm.move_card_slot_battle(true)
-	card_slot_norm.move_card_slot_candidate(true)
+	card_slot_controller.appear_choose()
 
 ## 卡槽出现（主游戏阶段开始）
 func card_slot_update_main_game():
-	match self.card_mode:
-		ConstLevelData.E_CardMode.Norm:
-			if not is_norm_appeared:
-				await card_slot_norm.move_card_slot_battle(true)
-			#card_slot_norm.remove_child(card_slot_battle)
-			#card_slot_container.add_child(card_slot_battle)
-			card_slot_battle.reparent(card_slot_container)
-			card_slot_battle.main_game_refresh_card()
-			## 测试模式卡片没有冷却
-			if Global.main_game.is_test:
-				for card in card_slot_battle.curr_cards:
-					card.card_change_cool_time(0)
-
-		ConstLevelData.E_CardMode.ConveyorBelt:
-			## 教程关（1-5 铲子教学）：传送带等玩家铲完预置植物后由 TutorialManager 启动
-			if _is_conveyor_start_by_tutorial():
-				Log.debug("本关有新手教程，传送带交给教程管理器启动")
-			else:
-				await start_conveyor_belt()
+	await card_slot_controller.update_main_game()
+	## 同时有卡槽和传送带时：卡槽在上，传送带压到卡槽下面（按出战卡槽的实际高度）
+	## 传送带也不挪进卡槽容器了：那个容器会把子控件铺满同一个矩形，两条卡槽会叠在一起
+	if conveyor_controller.has_conveyor_belt() and card_slot_controller.has_card_slot():
+		conveyor_controller.keep_out_of_container = true
+		conveyor_controller.set_appear_pos_y(card_slot_controller.get_slot_height())
+	## 传送带不在这里启动：它跟着「开战」走（见 main_game_start / start_conveyor_belt）——
+	## 教学排在开战之前的关卡（1-5）会先调一次「允许操作」，那时传送带还不该出现
 	## 铲子（手持物）界面由 HandManager 依据关卡参数与主游戏阶段统一刷新
 
 ## 待选卡槽卡槽消失
@@ -120,35 +164,21 @@ func card_slot_update_main_game():
 ## 选卡阶段被跳过后(见 ResourceLevelData.is_no_choose_permission)这里要能空转,
 ## 否则「选卡」事件会在这里报错,关卡再也走不到开战
 func card_slot_disappear_choose():
-	if card_slot_norm == null:
-		return
-	await card_slot_norm.move_card_slot_candidate(false)
+	await card_slot_controller.disappear_choose()
 
 
-## 传送带是否由教程接管启动：本关创建了教程管理器（1-5 铲子教学）
-## 判定用「有没有教程管理器、教程跑完没有」而不是「教程是否在跑」——
-## 卡槽刷新发生在 start_tutorial() 之前；开场教程（1-5）在关卡开局之前就跑完了，
-## 此时传送带该由关卡通流程启动，不能再等教程
-func _is_conveyor_start_by_tutorial() -> bool:
-	## main_game 由基类 MainGameSubManager 在 _enter_tree 中解析，此处直接使用，不要重复声明同名局部变量
-	if not is_instance_valid(main_game) or main_game.tutorial_manager == null:
-		return false
-	return not main_game.tutorial_manager.is_finished
-
-
-## 传送带出现并开始运转（教程关由 TutorialManager 在铲完预置植物后调用，可重复调用）
+## 传送带出现并开始运转（由「开战」启动，可重复调用；见 MainGameManager.main_game_start）
 func start_conveyor_belt() -> void:
-	if card_slot_conveyor_belt == null or is_conveyor_belt_started:
+	if not conveyor_controller.has_conveyor_belt() or is_conveyor_belt_started:
 		return
 	is_conveyor_belt_started = true
-	await card_slot_conveyor_belt.move_card_slot_conveyor_belt(true)
-	card_slot_conveyor_belt.reparent(card_slot_container)
-	card_slot_conveyor_belt.start_conveyor_belt()
+	await conveyor_controller.start()
 
 #region 临时卡片
 enum E_TempCardParaAttr{
 	PlantType,
 	ZombieType,
+	CardReference,	## 卡牌身份引用，优先于上面的植物/僵尸编号
 	GlobalPos,
 	ExistTime,	## 存在时间，若没有，则永久存在
 }
@@ -160,16 +190,26 @@ func add_card_front_node(node:Node) -> void:
 	canvas_layer_card_slot_front.add_child(node)
 
 ## 创建临时卡片
+## 身份可以用 [member E_TempCardParaAttr.CardReference] 直接给出，也可以沿用旧的植物/僵尸编号。
 func create_temp_card(temp_card_para:Dictionary) -> Card:
-	var new_card_prefabs:Card
-	if temp_card_para.has(E_TempCardParaAttr.PlantType) and temp_card_para[E_TempCardParaAttr.PlantType] != CharacterRegistry.PlantType.Null:
-		new_card_prefabs = AllCards.all_plant_card_prefabs[temp_card_para[E_TempCardParaAttr.PlantType]]
-	elif temp_card_para.has(E_TempCardParaAttr.ZombieType) and temp_card_para[E_TempCardParaAttr.ZombieType] !=  CharacterRegistry.ZombieType.Null:
-		new_card_prefabs = AllCards.all_zombie_card_prefabs[temp_card_para[E_TempCardParaAttr.ZombieType]]
-	else:
+	var card_reference: ResourceCardReference = temp_card_para.get(E_TempCardParaAttr.CardReference, null) as ResourceCardReference
+	if card_reference == null:
+		if temp_card_para.has(E_TempCardParaAttr.PlantType) and temp_card_para[E_TempCardParaAttr.PlantType] != CharacterRegistry.PlantType.Null:
+			card_reference = ResourceCardReference.create(ResourceCardReference.CardType.Plant,
+				temp_card_para[E_TempCardParaAttr.PlantType])
+		elif temp_card_para.has(E_TempCardParaAttr.ZombieType) and temp_card_para[E_TempCardParaAttr.ZombieType] != CharacterRegistry.ZombieType.Null:
+			card_reference = ResourceCardReference.create(ResourceCardReference.CardType.Zombie,
+				temp_card_para[E_TempCardParaAttr.ZombieType])
+	if card_reference == null:
 		Log.warn("error: 没有卡片类型")
 		return
+	var new_card_prefabs:Card = AllCards.get_template(card_reference)
+	if new_card_prefabs == null:
+		Log.warn("error: 卡牌类型未注册：" + str(card_reference.to_dict()))
+		return
 	var temp_card = new_card_prefabs.duplicate()
+	## 副本默认与源卡共享身份资源,先换成独立引用
+	temp_card.make_reference_unique()
 	curr_temp_cards.append(temp_card)
 	canvas_layer_card_slot_front.add_child(temp_card)
 	temp_card.global_position = temp_card_para.get(E_TempCardParaAttr.GlobalPos, Vector2(100, 100))
@@ -179,6 +219,17 @@ func create_temp_card(temp_card_para:Dictionary) -> Card:
 		temp_card_add_exist_timer(temp_card, temp_card_para[E_TempCardParaAttr.ExistTime])
 
 	return temp_card
+
+## 按卡牌身份创建临时卡；[param exist_time] 为负数表示永久存在。
+## 支持已注册的植物、普通僵尸和僵王，非法引用或未注册模板返回 null。
+func create_temp_card_by_reference(card_reference: ResourceCardReference, global_pos: Vector2, exist_time: float = -1.0) -> Card:
+	var para: Dictionary = {
+		E_TempCardParaAttr.CardReference: card_reference,
+		E_TempCardParaAttr.GlobalPos: global_pos,
+	}
+	if exist_time >= 0.0:
+		para[E_TempCardParaAttr.ExistTime] = exist_time
+	return create_temp_card(para)
 
 func temp_card_add_exist_timer(temp_card:Card, temp_card_exist_time:float):
 	var temp_card_timer:Timer = Timer.new()
@@ -215,14 +266,12 @@ func clear_all_temp_cards():
 #region 存档
 func get_save_game_data_card_manager()->Dictionary:
 	var save_game_data_card_manager:Dictionary = {}
-	match self.card_mode:
-		ConstLevelData.E_CardMode.Norm:
-			save_game_data_card_manager["curr_sun_value"] = card_slot_battle.sun_value
+	if card_slot_controller.has_card_slot():
+		save_game_data_card_manager["curr_sun_value"] = card_slot_controller.get_sun_value()
 	return save_game_data_card_manager
 
 func load_game_data_card_manager(save_game_data_card_manager:Dictionary):
-	match self.card_mode:
-		ConstLevelData.E_CardMode.Norm:
-			card_slot_battle.sun_value = int(save_game_data_card_manager.get("curr_sun_value", game_para.start_sun))
+	if card_slot_controller.has_card_slot():
+		card_slot_controller.set_sun_value(int(save_game_data_card_manager.get("curr_sun_value", game_para.start_sun)))
 
 #endregion

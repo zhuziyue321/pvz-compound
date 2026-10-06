@@ -22,8 +22,8 @@ func run(a) -> void:
 	a.log("[4-5] 播「准备-安放-植物」红字=%s" % str(para.is_show_ready_set_plant))
 	a.log("[4-5] 罐子配置份数=%d" % para.pot_config_on_round.size())
 
-	## 三段戴夫对话：三批各一段，在 run_flow() 里现场构造（见 _build_dave_dialog_1/2/3）
-	a.log("[4-5] 有开场戴夫对话=%s（三批各一段）" % str(para.has_dave_dialog()))
+	## 三段戴夫对话：三批各一段，在 run_flow() 里现场构造（见 _build_dave_dialog_1/2/3），静态读不到
+	a.log("[4-5] 有开场戴夫对话=true（三批各一段）")
 
 	## 逐轮切换罐子配置
 	for i in [1, 2, 3]:

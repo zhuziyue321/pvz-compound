@@ -10,7 +10,7 @@
 [ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni3.png" id="3_fuck"]
 [ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni4.png" id="4_fuck"]
 [ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni5.png" id="5_fuck"]
-[ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni6 .png" id="6_fuck"]
+[ext_resource type="Texture2D" uid="uid://bnovj8cuowh4k" path="res://assets/reanim/Zombie_charred_zamboni6.png" id="6_fuck"]
 [ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni7.png" id="7_fuck"]
 [ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni8.png" id="8_fuck"]
 [ext_resource type="Texture2D" path="res://assets/reanim/Zombie_charred_zamboni9.png" id="9_fuck"]

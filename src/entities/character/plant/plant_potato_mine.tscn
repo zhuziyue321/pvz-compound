@@ -281,7 +281,7 @@ can_attack_zombie_status = 21
 
 [node name="Area2DBomb" type="Area2D" parent="BombComponent" index="0"]
 collision_layer = 0
-collision_mask = 20
+collision_mask = 4
 input_pickable = false
 monitorable = false
 

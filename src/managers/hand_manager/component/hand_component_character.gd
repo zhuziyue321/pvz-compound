@@ -22,6 +22,8 @@ var plant_condition: ResourcePlantCondition
 var zombie_row_type: CharacterRegistry.ZombieRowType
 ## 虚影在格子中，即可以种植
 var is_shadow_in_cell := false
+## 当前手持的是僵王卡：任意战场格子都能确认召唤
+var _is_boss_card := false
 
 ## 紫卡植物可以的预种植植物，点击卡片时明暗交替
 var curr_all_preplant_purple: Array[Plant000Base] = []
@@ -55,6 +57,13 @@ func enter_hand(payload: Variant = null) -> bool:
 	curr_card = card
 	EventBus.push_event("hand_card_take", [curr_card])
 
+	## 僵王：召唤不检查格子占用、水陆或行号，虚影落在格子的普通植物位置
+	if curr_card.card_type == ResourceCardReference.CardType.ZombieBoss:
+		_is_boss_card = true
+		if not _create_hand_static():
+			_clear_curr_data()
+			return false
+		return true
 	## 植物
 	if curr_card.card_plant_type != CharacterRegistry.PlantType.Null:
 		plant_condition = Global.character_registry.get_plant_info(
@@ -116,6 +125,7 @@ func _clear_curr_data() -> void:
 		end_preplant_purple_light()
 
 	is_shadow_in_cell = false
+	_is_boss_card = false
 	## 若当前存在卡片，事件总线推清除当前卡片数据，种子雨卡槽接受判断
 	if is_instance_valid(curr_card):
 		EventBus.push_event("hand_card_release", [curr_card])
@@ -175,6 +185,14 @@ func click_cell(plant_cell: PlantCell) -> bool:
 		SoundManager.play_other_SFX("buzzer")
 		return false
 
+	if _is_boss_card:
+		var boss: ZB000Base = main_game.zombie_manager.try_create_boss_from_card(curr_card.card_zombie_boss_type)
+		if boss == null:
+			SoundManager.play_other_SFX("buzzer")
+			return false
+		curr_card.signal_card_use_end.emit()
+		return true
+
 	if curr_card.card_plant_type != CharacterRegistry.PlantType.Null:
 		## 坚果包扎术：手持坚果类卡片点在掉手 / 裂开的同种坚果上 = 补种修复，
 		## 不铲除旧植物也不腾格子，照样扣一张卡的钱与冷却
@@ -207,6 +225,13 @@ func click_cell(plant_cell: PlantCell) -> bool:
 
 ## 更新植物格子虚影，返回是否能种
 func _update_cell_shadow(plant_cell: PlantCell, curr_characte_static_shadow: Node2D) -> bool:
+	## 僵王：不检查占用、水陆或行号，虚影落在格子的普通植物位置
+	if _is_boss_card:
+		curr_characte_static_shadow.global_position = plant_cell.get_new_plant_static_shadow_global_position(
+			CharacterRegistry.PlacePlantInCell.Norm
+		)
+		curr_characte_static_shadow.modulate.a = 0.5
+		return true
 	## 植物
 	if curr_card.card_plant_type != CharacterRegistry.PlantType.Null:
 		## 判定是否可以种植植物

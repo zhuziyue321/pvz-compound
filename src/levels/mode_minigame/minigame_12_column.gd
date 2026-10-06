@@ -23,31 +23,6 @@ const SHADOW_ALPHA := 0.5
 
 func _init() -> void:
 	save_key = "102_0_0005"
-	var pre_plant_in_level_0 := PrePlantResource.new()
-	pre_plant_in_level_0.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_0.plant_cell_pos = Vector2i(0, 1)
-	var pre_plant_in_level_1 := PrePlantResource.new()
-	pre_plant_in_level_1.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_1.plant_cell_pos = Vector2i(0, 2)
-	var pre_plant_in_level_2 := PrePlantResource.new()
-	pre_plant_in_level_2.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_2.plant_cell_pos = Vector2i(0, 3)
-	var pre_plant_in_level_3 := PrePlantResource.new()
-	pre_plant_in_level_3.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_3.plant_cell_pos = Vector2i(0, 4)
-	var pre_plant_in_level_4 := PrePlantResource.new()
-	pre_plant_in_level_4.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_4.plant_cell_pos = Vector2i(0, 5)
-	var pre_plant_in_level_5 := PrePlantResource.new()
-	pre_plant_in_level_5.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_5.plant_cell_pos = Vector2i(0, 6)
-	var pre_plant_in_level_6 := PrePlantResource.new()
-	pre_plant_in_level_6.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_6.plant_cell_pos = Vector2i(0, 7)
-	var pre_plant_in_level_7 := PrePlantResource.new()
-	pre_plant_in_level_7.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_7.plant_cell_pos = Vector2i(0, 8)
-
 	game_sences = MainSceneRegistry.MainScenes.MainGameRoof
 	game_BG = ConstLevelData.GameBg.Roof
 	## 原版本关播「Ultimate Battle」（与冒险 1-10 / 2-10 / 3-10 同源），**不是**僵王曲
@@ -56,12 +31,11 @@ func _init() -> void:
 	##    and Brain Busters feature the track 'Ultimate Battle'」
 	game_BGM = ConstLevelData.GameBGM.UltimateBattle
 	is_day_sun = false
-	all_pre_plant_data.assign([pre_plant_in_level_0, pre_plant_in_level_1, pre_plant_in_level_2, pre_plant_in_level_3, pre_plant_in_level_4, pre_plant_in_level_5, pre_plant_in_level_6, pre_plant_in_level_7])
 	zombie_multy = 10
 	is_bungi = true
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
 	start_sun = 50000
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	3: 1,
 	7: 1,
 	18: 1,
@@ -71,7 +45,7 @@ func _init() -> void:
 	35: 1,
 	40: 1
 	})
-	card_order_plant.assign({
+	conveyor_order = ResourceCardReference.create_plant_order({
 	0: 5,
 	1: 24,
 	2: 40,
@@ -289,6 +263,8 @@ func _get_cell(row: int, col: int) -> PlantCell:
 
 
 func run_flow(_mg: MainGameManager) -> void:
+	## 屋顶是裸地：先沿整列铺出左侧 8 列的种植位（原版本关 9 列里只有最右一列没有花盆）
+	await plant_flower_pot_columns(8)
 	## 出怪表：本关多处要用同一份，抽成变量避免重复写
 	var zombie_list: Array[CharacterRegistry.ZombieType] = [
 		CharacterRegistry.ZombieType.Z007ScreenDoor,
@@ -303,14 +279,14 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(-1, zombie_list)
+	await start_battle(-1, zombie_list)
 	## 关卡结束（赢 / 输 / 僵尸进家都从这里往下走）：整列虚影与格子接线由本关自己收掉
 	_free_column_items()

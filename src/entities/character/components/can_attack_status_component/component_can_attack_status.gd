@@ -16,4 +16,9 @@ func can_attack(enemy:Character000Base) -> bool:
 		return (enemy.curr_be_attack_status & can_attack_plant_status) != 0
 	elif enemy is Zombie000Base:
 		return (enemy.curr_be_attack_status & can_attack_zombie_status) != 0
+	elif enemy is ZB000Base:
+		## 僵王没有受击状态枚举，受击窗口由状态机直接控制（见 ZB000Base.hurt_box_component）；
+		## 这里只校验出战状态，并要求攻击者至少能打到「正常」状态的僵尸。
+		return enemy.character_init_type == Character000Base.E_CharacterInitType.IsNorm \
+			and (can_attack_zombie_status & Zombie000Base.E_BeAttackStatusZombie.IsNorm) != 0
 	return false

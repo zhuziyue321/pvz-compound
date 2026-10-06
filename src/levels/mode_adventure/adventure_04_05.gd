@@ -5,7 +5,7 @@ extends LevelScriptBase
 ## 原 .tres 上的 timeline 事件数组已按原顺序平铺成 run_flow() 里的 await 序列。
 
 
-## 第 1 批：戴夫介绍玩法（在 run_flow() 里现场构造并传给 prefab.dave_dialog）
+## 第 1 批：戴夫介绍玩法（在 run_flow() 里现场构造并传给 dave_dialog）
 func _build_dave_dialog_1() -> CrazyDaveDialogResource:
 	var crazy_dave_dialog_detail_resource_0 := CrazyDaveDialogDetailResource.new()
 	crazy_dave_dialog_detail_resource_0.text = "我和我的哥们，弗莱科斯卡斯特-哈维，以前在无聊的时候就打花瓶。"
@@ -136,26 +136,22 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 第 1 批：戴夫介绍玩法
-	await prefab.dave_dialog(_build_dave_dialog_1())
+	await dave_dialog(_build_dave_dialog_1())
 	## 初始化小推车：砸罐子关不播「准备安放植物」，这里是本关唯一能上推车的地方
-	await prefab.init_lawn_mover()
+	await init_lawn_mover()
 	## 第 1 批开战：罐子在进关时就摆好了。等到本批罐子全砸开 + 场上僵尸清空
-	await prefab.start_battle(10, zombie_list)
+	await start_battle(10, zombie_list)
 	## 第 2 批：戴夫说话（戴夫再摆一批罐子）
-	await prefab.dave_dialog(_build_dave_dialog_2())
+	await dave_dialog(_build_dave_dialog_2())
 	## 第 2 批清场：清掉上批残留的植物 / 没砸开的罐子，再按第 2 轮配置摆出新一批（4 列）
-	await prefab.clear_field()
+	await clear_field()
 	## 第 2 批开战：等到本批罐子全砸开 + 场上僵尸清空
-	await prefab.start_battle(10, zombie_list)
+	await start_battle(10, zombie_list)
 	## 第 3 批：戴夫说话（戴夫摆最后一批罐子）
-	await prefab.dave_dialog(_build_dave_dialog_3())
+	await dave_dialog(_build_dave_dialog_3())
 	## 第 3 批清场：清掉上批残留，再按第 3 轮配置摆出新一批（5 列）
-	await prefab.clear_field()
+	await clear_field()
 	## 第 3 批开战：最后一轮，打完由砸罐子玩法自己推 create_trophy 结算
-	await prefab.start_battle(10, zombie_list)
+	await start_battle(10, zombie_list)
 
 
-## 本关有戴夫对话（三批各一段，在 run_flow() 里现场构造，见 _build_dave_dialog_1/2/3）：
-## 这里只做声明 —— 有对话就不再播戴夫推销卡槽扩充（见 is_dave_sell_possible）
-func has_dave_dialog() -> bool:
-	return true

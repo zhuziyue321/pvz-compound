@@ -32,8 +32,9 @@ func run(a) -> void:
 	a.log("STEP1 关卡=%s 卡槽=%d 拥有卡数=%d" % [
 		para.level_id, para.get_max_choosed_card_num(), state.curr_plant.size()])
 	_check(a, "1-1 触发锁槽", para.is_locked_card_slot == true, str(para.is_locked_card_slot))
-	_check(a, "1-1 预选卡=拥有的卡", _first_n(para.pre_choosed_card_list_plant, state.curr_plant.size()) == state.curr_plant,
-		str(para.pre_choosed_card_list_plant))
+	var prechosen_ids: Array = para.prechosen_cards.map(func(r): return r.content_id)
+	_check(a, "1-1 预选卡=拥有的卡", _first_n(prechosen_ids, state.curr_plant.size()) == state.curr_plant,
+		str(prechosen_ids))
 	var battle = Global.main_game.card_manager.card_slot_battle
 	## 卡槽数由存档决定（基准 6 + 已购扩充）：1-1 只有 1 张已拥有卡，出战卡槽只填这一张，其余为空槽
 	_check(a, "1-1 卡槽数=6", para.get_max_choosed_card_num() == 6, str(para.get_max_choosed_card_num()))

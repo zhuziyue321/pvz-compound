@@ -54,8 +54,9 @@ func push_event(event_name: String, payload : Variant = [], immediate: bool = tr
 	var ordered_connections = _sort_connections_by_priority(event_name, connections)
 
 	# 筛选满足过滤条件的连接
+	# to_disconnect 存 {conn, obj_id}：obj_id 为空表示对象已释放（此时取不到 instance id）
 	var filtered_connections = []
-	var to_disconnect = []
+	var to_disconnect: Array[Dictionary] = []
 
 	for conn in ordered_connections:
 		var object = conn["callable"].get_object()
@@ -63,7 +64,7 @@ func push_event(event_name: String, payload : Variant = [], immediate: bool = tr
 
 		# 如果对象已被释放，将其标记为需要断开连接
 		if not is_instance_valid(object):
-			to_disconnect.append(conn)
+			to_disconnect.append({"conn": conn, "obj_id": ""})
 			continue
 
 		# 检查过滤器
@@ -78,7 +79,7 @@ func push_event(event_name: String, payload : Variant = [], immediate: bool = tr
 
 			# 如果是一次性订阅，标记为需要断开连接
 			if metadata["once"]:
-				to_disconnect.append(conn)
+				to_disconnect.append({"conn": conn, "obj_id": obj_id})
 
 		filtered_connections.append(conn)
 
@@ -89,19 +90,21 @@ func push_event(event_name: String, payload : Variant = [], immediate: bool = tr
 		else:
 			_schedule_deferred_call(conn["callable"], payload)
 
-	# 断开一次性连接
-	for conn in to_disconnect:
-		var object = conn["callable"].get_object()
-		var method = conn["callable"].get_method()
-		if is_instance_valid(object):
+	# 断开一次性连接 / 对象已释放的僵尸连接
+	# 注意：这里**不能**加 is_instance_valid(object) 保护 —— 僵尸连接的对象本来就已释放，
+	# 加了这层判断它们永远断不掉，连接表与 _event_metadata 会随关卡切换单调膨胀
+	for item in to_disconnect:
+		var conn: Dictionary = item["conn"]
+		var obj_id: String = item["obj_id"]
+		if is_connected(event_name, conn["callable"]):
 			disconnect(event_name, conn["callable"])
+		if obj_id != "" and _event_metadata.has(event_name):
+			_event_metadata[event_name].erase(obj_id)
+			if _event_metadata[event_name].is_empty():
+				_event_metadata.erase(event_name)
 
-			# 移除元数据
-			var obj_id = _get_object_id(object, method)
-			if _event_metadata.has(event_name) and _event_metadata[event_name].has(obj_id):
-				_event_metadata[event_name].erase(obj_id)
-				if _event_metadata[event_name].is_empty():
-					_event_metadata.erase(event_name)
+	# 对象已释放的连接取不到 instance id，对应元数据只能靠连接表对账回收
+	_prune_orphan_metadata(event_name)
 
 	event_handled.emit(event_name, payload)
 
@@ -128,7 +131,7 @@ func subscribe(
 			if debug_mode:
 				Log.debug("[EventBus] Callback already subscribed to event: %s" % event_name)
 			else:
-				push_warning("Callback already subscribed to event: %s" % event_name)
+				Log.warn("Callback already subscribed to event: %s" % event_name)
 			return
 
 	# 连接信号
@@ -247,6 +250,25 @@ func _get_all_signals() -> Array[String]:
 ## 为对象和方法生成唯一ID
 func _get_object_id(object: Object, method: StringName) -> String:
 	return str(object.get_instance_id()) + "_" + method
+
+## 回收孤儿元数据：连接表里已经找不到对应订阅者的条目
+## 为什么需要：对象被释放后 get_instance_id() 取不到，push_event 里无法拼出 obj_id，
+## 只能拿「当前连接表」与「元数据表」对账，把没有存活订阅者的条目清掉。
+## 不清的后果：每关重建的管理器反复订阅，_event_metadata 单调膨胀（内存 + 排序开销）。
+func _prune_orphan_metadata(event_name: String) -> void:
+	if not _event_metadata.has(event_name):
+		return
+	var alive_ids: Dictionary = {}
+	for conn in get_signal_connection_list(event_name):
+		var object = conn["callable"].get_object()
+		if is_instance_valid(object):
+			alive_ids[_get_object_id(object, conn["callable"].get_method())] = true
+	## keys() 返回快照数组，遍历中 erase 安全
+	for obj_id in _event_metadata[event_name].keys():
+		if not alive_ids.has(obj_id):
+			_event_metadata[event_name].erase(obj_id)
+	if _event_metadata[event_name].is_empty():
+		_event_metadata.erase(event_name)
 
 ## 按优先级排序连接
 func _sort_connections_by_priority(event_name: String, connections: Array) -> Array:

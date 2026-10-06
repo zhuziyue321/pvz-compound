@@ -93,7 +93,6 @@ enum E_InitParasAttr{
 	## 抛物线子弹\追踪子弹额外属性
 	Enemy,				## 子弹选中的敌人
 	EnemyGloPos,		## 敌人位置(发射子弹时敌人若已经消失,抛物线依旧可以攻击)
-	ZombossBoss,		## 僵王博士目标(投手抛物线；僵王不是 Character000Base，单独传)
 
 	## 阵营相关
 	BulletCamp,			## 子弹阵营（发射方决定；不传时沿用场景导出值 bullet_camp）
@@ -134,19 +133,11 @@ func get_bullet_paras()->Dictionary[E_InitParasAttr,Variant]:
 ## 子弹与敌人碰撞
 func _on_area_2d_attack_area_entered(area: Area2D) -> void:
 	var enemy = area.owner
-	## 僵王博士不是 Character000Base（独立 Node2D），且只在低头窗口里可被命中
-	if enemy is ZombossBoss:
-		var boss: ZombossBoss = enemy
-		if boss.is_dead or not boss.is_head_vulnerable:
-			return
-		if max_attack_num != -1 and curr_attack_num >= max_attack_num:
-			return
-		attack_once_boss(boss)
-		return
 	## 只攻击敌对阵营：植物方子弹打僵尸，僵尸方子弹（植物僵尸 / 投石车僵尸）打植物
+	## 僵王是正式角色，阵营侧按僵尸处理（见 BulletCampConfig），可攻击状态由组件判定
 	## 同阵营（含魅惑僵尸对植物方子弹）由碰撞层先过滤掉，这里再判一次保证语义明确
 	if not BulletCampConfig.is_enemy(bullet_camp, enemy):
-		if not (enemy is Plant000Base or enemy is Zombie000Base):
+		if not (enemy is Plant000Base or enemy is Zombie000Base or enemy is ZB000Base):
 			## 非角色（斜坡、道具等）由子类先行处理，走到这里说明检测层配错了
 			Log.error("子弹检测到的对象既不是植物也不是僵尸：" + str(enemy))
 		return
@@ -157,12 +148,11 @@ func _on_area_2d_attack_area_entered(area: Area2D) -> void:
 	if max_attack_num != -1 and curr_attack_num >= max_attack_num:
 		return
 
-	## 如果子弹有行属性
-	if is_activate_lane:
-		if lane == enemy.lane:
-			attack_once(enemy)
-	else:
-		attack_once(enemy)
+	## 如果子弹有行属性；僵王不加入普通僵尸行列表，lane 恒为 -1，
+	## 因此它豁免同行限制，能否命中只由攻击框与受击框的空间重叠决定
+	if is_activate_lane and lane != enemy.lane and not enemy is ZB000Base:
+		return
+	attack_once(enemy)
 
 
 ## 对敌人造成伤害
@@ -174,6 +164,9 @@ func _attack_enemy(enemy:Character000Base):
 		_attack_zombie(enemy)
 	elif enemy is Plant000Base:
 		_attack_plant(enemy)
+	elif enemy is ZB000Base:
+		## 僵王直接使用角色伤害入口，不转换成普通僵尸或套用其防具规则
+		enemy.be_attacked_bullet(attack_value, bullet_mode, true, trigger_be_attack_sfx)
 
 ## 对僵尸敌人造成伤害,直线类子弹重写
 func _attack_zombie(zombie:Zombie000Base):
@@ -195,21 +188,6 @@ func _attack_plant(plant:Plant000Base):
 ## 抛物线子弹先对Norm进行攻击
 func get_first_be_hit_plant_in_cell(plant:Plant000Base)->Plant000Base:
 	return plant
-
-## 攻击一次僵王博士（僵王不是 Character000Base，不能走 attack_once 的角色分支）
-## 特效 X 用僵王机体原点 + reanim 锚点修正：僵王的节点原点在机体左侧 ~660px 处
-func attack_once_boss(boss: ZombossBoss) -> void:
-	curr_attack_num += 1
-	if max_attack_num != -1 and curr_attack_num > max_attack_num:
-		return
-	boss.be_attacked_bullet(attack_value, bullet_mode, true, trigger_be_attack_sfx)
-	if type_bullet_SFX != SoundManagerClass.TypeBulletSFX.Null:
-		SoundManager.play_bullet_attack_SFX(type_bullet_SFX)
-	if bullet_effect.is_bullet_effect:
-		bullet_effect.global_position.x = boss.global_position.x + ZombossBoss.REANIM_ANCHOR_X - 40.0
-		bullet_effect.activate_bullet_effect()
-	if max_attack_num != -1 and curr_attack_num >= max_attack_num:
-		queue_free()
 
 ## 攻击一次
 func attack_once(enemy:Character000Base):

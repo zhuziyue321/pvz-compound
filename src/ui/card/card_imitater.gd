@@ -7,6 +7,10 @@ var is_be_choosed_imitater:= false
 
 ## 点击卡片时
 func _on_button_pressed() -> void:
+	## 关卡自定义种子包（CardContext.Custom）不走模仿者的选卡逻辑：交给 Card 里的自定义回调
+	if card_context == Card.CardContext.Custom:
+		super._on_button_pressed()
+		return
 	if not is_be_choosed_imitater:
 		signal_card_click.emit()
 

@@ -29,6 +29,8 @@ var is_mini_zombie:= false
 var is_pot_zombie:=false
 ## 是否正在从地下出现
 var is_body_up_from_ground := false
+## 是否参与自然出怪的提前刷新判定；技能召唤与衍生僵尸为 false，子僵尸继承来源
+var participates_natural_refresh: bool = true
 
 @export_subgroup("僵尸铁器")
 ## 铁器种类
@@ -142,6 +144,8 @@ enum E_ZInitAttr{
 	IsPotZombie,		## 是否为罐子生成的僵尸，小丑瞬爆
 	IsZombieMode,		## 是否为我是僵尸模式的僵尸，气球落地,撑杆食脑
 	IsInvisible,		## 本体是否隐形（通用外观项：本体与影子透明，被冰冻 / 黄油时才现形）
+	## 是否参与自然出怪提前刷新，子僵尸继承来源；默认 true 保留原有生成方式的行为
+	ParticipatesNaturalRefresh,
 }
 
 ## 修改初始化状态，在添加到场景树之前调用
@@ -149,6 +153,7 @@ func init_zombie(zombie_init_para:Dictionary):
 	self.character_init_type = zombie_init_para.get(E_ZInitAttr.CharacterInitType, E_CharacterInitType.IsNorm)
 	self.is_mini_zombie = zombie_init_para.get(E_ZInitAttr.IsMiniZombie, false)
 	self.is_invisible = zombie_init_para.get(E_ZInitAttr.IsInvisible, false)
+	self.participates_natural_refresh = zombie_init_para.get(E_ZInitAttr.ParticipatesNaturalRefresh, true)
 	match self.character_init_type:
 		E_CharacterInitType.IsNorm:
 			self.is_pot_zombie = zombie_init_para.get(E_ZInitAttr.IsPotZombie, false)

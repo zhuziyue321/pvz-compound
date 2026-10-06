@@ -69,9 +69,10 @@ enum E_MonsterMode {
 #region 卡槽
 ## 卡槽模式
 enum E_CardMode {
-	Null,
-	Norm,
-	ConveyorBelt,
+	Null, ## 没有卡槽（罐子模式：卡片全从罐子里开出）
+	Norm, ## 常规卡槽：出战卡由选卡决定
+	ConveyorBelt, ## 只有传送带：出战卡由传送带按权重发，玩家不选卡
+	Both, ## 卡槽 + 传送带同时出现（卡槽在上、传送带在下）：卡槽走选卡，传送带按权重补卡
 }
 #endregion
 

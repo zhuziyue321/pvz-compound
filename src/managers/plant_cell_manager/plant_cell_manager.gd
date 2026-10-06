@@ -154,7 +154,6 @@ func init_manager() -> void:
 	tomb_stone_manager.init_tomb_stone_manager(game_para)
 	## 没有存档直接创建植物和创建罐子
 	if not Global.main_game.is_save_game_data_on_init:
-		create_pre_plant()
 		init_pot()
 		cerate_pot()
 		if game_para.is_zombie_mode:
@@ -178,44 +177,38 @@ func signal_connect_plant_cell_with_hand_manager(hand_manager:HandManager):
 			plant_cell.cell_mouse_exit.connect(hand_manager._on_cell_mouse_exit)
 
 
-## 预种植植物数据
-func create_pre_plant():
-	for pre_plant_data in game_para.all_pre_plant_data:
-		pre_plant_one(pre_plant_data)
-
-
-## 按一条预种植数据种下植物
-## 关卡开局的预置植物（all_pre_plant_data）和时间轴的「系统种植」事件共用这一种法。
+## 按一条「系统种植」数据种下植物
+## 关卡脚本 run_flow() 里的 `system_plant()` 和「系统种植」时间轴事件共用这一种法。
 ## plant_cell_pos 语义（从 1 开始，0 表示整行 / 整列）：
 ##   (0,0) 满屏 / (0,y) 第 y 列 / (x,0) 第 x 行 / (x,y) 第 x 行第 y 列
-func pre_plant_one(pre_plant_data: PrePlantResource) -> void:
-	if pre_plant_data == null:
-		Log.error("关卡数据中预种植植物有空值")
+func system_plant_one(plant_data: SystemPlantResource) -> void:
+	if plant_data == null:
+		Log.error("系统种植数据有空值")
 		return
 	## 行或列大于当前最大值\小于0,跳过
-	if pre_plant_data.plant_cell_pos.x > row_col.x or\
-	pre_plant_data.plant_cell_pos.y > row_col.y or\
-	pre_plant_data.plant_cell_pos.x < 0 or pre_plant_data.plant_cell_pos.y < 0:
+	if plant_data.plant_cell_pos.x > row_col.x or\
+	plant_data.plant_cell_pos.y > row_col.y or\
+	plant_data.plant_cell_pos.x < 0 or plant_data.plant_cell_pos.y < 0:
 		return
 	## 满屏铺满
-	elif pre_plant_data.plant_cell_pos.x == 0 and pre_plant_data.plant_cell_pos.y == 0:
+	elif plant_data.plant_cell_pos.x == 0 and plant_data.plant_cell_pos.y == 0:
 		for plant_cell_row in all_plant_cells:
 			for plant_cell:PlantCell in plant_cell_row:
-				plant_cell.create_plant(pre_plant_data.plant_type, false, false, pre_plant_data.is_imitater_plant, game_para.is_zombie_mode)
+				plant_cell.create_plant(plant_data.plant_type, false, false, plant_data.is_imitater_plant, game_para.is_zombie_mode)
 	## 某一列
-	elif pre_plant_data.plant_cell_pos.x == 0 and pre_plant_data.plant_cell_pos.y != 0:
+	elif plant_data.plant_cell_pos.x == 0 and plant_data.plant_cell_pos.y != 0:
 		for plant_cell_row in all_plant_cells:
-			var plant_cell:PlantCell = plant_cell_row[pre_plant_data.plant_cell_pos.y-1]
-			plant_cell.create_plant(pre_plant_data.plant_type, false, false, pre_plant_data.is_imitater_plant, game_para.is_zombie_mode)
+			var plant_cell:PlantCell = plant_cell_row[plant_data.plant_cell_pos.y-1]
+			plant_cell.create_plant(plant_data.plant_type, false, false, plant_data.is_imitater_plant, game_para.is_zombie_mode)
 	## 某一行
-	elif pre_plant_data.plant_cell_pos.x != 0 and pre_plant_data.plant_cell_pos.y == 0:
-		var plant_cell_row = all_plant_cells[pre_plant_data.plant_cell_pos.x-1]
+	elif plant_data.plant_cell_pos.x != 0 and plant_data.plant_cell_pos.y == 0:
+		var plant_cell_row = all_plant_cells[plant_data.plant_cell_pos.x-1]
 		for plant_cell:PlantCell in plant_cell_row:
-			plant_cell.create_plant(pre_plant_data.plant_type, false, false, pre_plant_data.is_imitater_plant, game_para.is_zombie_mode)
+			plant_cell.create_plant(plant_data.plant_type, false, false, plant_data.is_imitater_plant, game_para.is_zombie_mode)
 	## 某一个
 	else:
-		var plant_cell:PlantCell = all_plant_cells[pre_plant_data.plant_cell_pos.x-1][pre_plant_data.plant_cell_pos.y-1]
-		plant_cell.create_plant(pre_plant_data.plant_type, false, false, pre_plant_data.is_imitater_plant, game_para.is_zombie_mode)
+		var plant_cell:PlantCell = all_plant_cells[plant_data.plant_cell_pos.x-1][plant_data.plant_cell_pos.y-1]
+		plant_cell.create_plant(plant_data.plant_type, false, false, plant_data.is_imitater_plant, game_para.is_zombie_mode)
 
 ## 始化我是僵尸模式的植物数据
 func init_plant_on_zombie_mode():
@@ -346,8 +339,6 @@ func start_next_game_plant_cell_manager_update():
 			Log.debug(str("我是僵尸多轮游戏模式，更新向日葵随机权重为:") + str(max(9-Global.main_game.curr_game_round, 1)))
 			plant_random_pool_on_zombie_mode.update_item_weight(CharacterRegistry.PlantType.P002SunFlower, max(9-Global.main_game.curr_game_round, 1))
 		Log.debug("我是僵尸模式创建植物")
-		## 创建植物
-		create_pre_plant()
 		create_plant_on_zombie_mode()
 
 	## 多轮砸罐子关每批罐子的配置不一样（原版冒险 4-5：3 列 → 4 列 → 5 列，一批比一批难），

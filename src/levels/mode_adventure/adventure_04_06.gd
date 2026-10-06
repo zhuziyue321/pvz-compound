@@ -5,7 +5,7 @@ extends LevelScriptBase
 ## 原 .tres 上的 timeline 事件数组已按原顺序平铺成 run_flow() 里的 await 序列。
 
 
-## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 prefab.dave_dialog
+## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 dave_dialog
 func _build_dave_dialog() -> CrazyDaveDialogResource:
 	var crazy_dave_dialog_detail_resource_0 := CrazyDaveDialogDetailResource.new()
 	crazy_dave_dialog_detail_resource_0.text = "雾这么大，我差点撞到你的房子！"
@@ -37,12 +37,8 @@ func _build_dave_dialog() -> CrazyDaveDialogResource:
 
 
 func _init() -> void:
-	game_sences = MainSceneRegistry.MainScenes.MainGameBack
-	game_BG = ConstLevelData.GameBg.Fog
-	game_BGM = ConstLevelData.GameBGM.Fog
-	is_fog = true
-	is_day = false
-	is_day_sun = false
+	## 场景：泳池·浓雾 —— 槽位 / 底图 / BGM / 雾 / 昼夜 / 天降阳光全由场景脚本给出
+	scene_name = SceneSettingRegistry.SCENE_FOG
 	dave_dialog_only_first_playthrough = true
 	drop_unlock_wave = 5
 	drop_unlock_tip = "解谜模式解锁！可以从主菜单中进入该模式！"
@@ -59,21 +55,16 @@ func run_flow(_mg: MainGameManager) -> void:
 	## 关卡戴夫对话：整段是「戴夫送手套」的赠礼演出，手套功能隐藏时不播
 	## （见 ConstFeatureSwitch.GLOVE_ENABLED）
 	if ConstFeatureSwitch.GLOVE_ENABLED:
-		await prefab.dave_dialog(_build_dave_dialog())
+		await dave_dialog(_build_dave_dialog())
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(10, zombie_list)
+	await start_battle(10, zombie_list)
 
 
-## 本关的开场戴夫对话就是手套赠礼演出：对话在 run_flow() 里现场构造（见 _build_dave_dialog），
-## 手套功能隐藏时整段不播，这里同步声明「没有对话」（见 ConstFeatureSwitch.GLOVE_ENABLED）。
-## 有对话时：不再播戴夫推销卡槽扩充（见 is_dave_sell_possible）
-func has_dave_dialog() -> bool:
-	return ConstFeatureSwitch.GLOVE_ENABLED

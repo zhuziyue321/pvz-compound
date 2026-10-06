@@ -7,7 +7,7 @@ extends RefCounted
 ##   2. 内联 [sub_resource]（戴夫对话 / 教程 / 预种植…）→ _init() 里就地 new + 字段赋值，
 ##      构造顺序照 .tres 里的定义顺序（被依赖的先定义）
 ##   3. timeline = SubResource(...) 的事件数组 → run_flow() 里**按顺序平铺**的
-##      `await prefab.xxx()`，事件的 note 变成注释，is_first_round_only 变成 if 包裹
+##      `await xxx()`，事件的 note 变成注释，is_first_round_only 变成 if 包裹
 ##   4. `;` 开头的原版考据注释 → 原样保留（转成 `##`），**不经过 ResourceSaver**，
 ##      所以不会有「保存冲掉注释」的问题（见 tool_inline_timelines.gd 的踩坑）
 ##
@@ -22,8 +22,8 @@ const ROOT := "res://src/levels"
 ## [resource] 段里不需要搬进脚本的键
 const SKIP_KEYS := ["script", "metadata/_custom_type_script", "format_version"]
 
-## 事件脚本文件名 → LevelPrefabs 上的方法名
-const EVENT_PREFAB := {
+## 事件脚本文件名 → LevelScriptBase 上的流程方法名
+const EVENT_METHOD := {
 	"level_timeline_event_bowling_stripe.gd": "bowling_stripe",
 	"level_timeline_event_camera_back.gd": "camera_back",
 	"level_timeline_event_choose_card.gd": "choose_card",
@@ -37,7 +37,7 @@ const EVENT_PREFAB := {
 	"level_timeline_event_tutorial.gd": "tutorial",
 	"level_timeline_event_wait.gd": "wait",
 }
-## 事件上要作为 prefab 方法参数传的字段（其余字段事件自己从关卡数据取）
+## 事件上要作为流程方法参数传的字段（其余字段事件自己从关卡数据取）
 const EVENT_ARGS := ["wait_time", "timeout", "plants"]
 
 ## 类型是枚举的字段：.tres 里存的是裸 int，直接 `=` 会触发 INT_AS_ENUM_WITHOUT_CAST。
@@ -45,7 +45,8 @@ const EVENT_ARGS := ["wait_time", "timeout", "plants"]
 ## 写 `EnumType(值)` 会报 "Member ... is not a function"），
 ## 成员名按值反查 enum 定义得到：[脚本路径, enum 名, 类名]
 ## 按**字段名**匹配，所以顶层属性和内联子资源的属性都生效
-## （子资源上的 plant_type / pointer_target / finish_type 就是靠这几条转的）
+## （子资源上的 plant_type 就是靠这条转的；教程步骤的 pointer_target / finish_type
+## 随教程系统一并删除了，迁移工具不再认这两个字段）
 const ENUM_FIELDS := {
 	"game_sences": ["res://src/core/autoload/main_scene_registry.gd", "MainScenes", "MainSceneRegistry"],
 	"game_BG": ["res://src/core/consts/const_level_data.gd", "GameBg", "ConstLevelData"],
@@ -54,9 +55,7 @@ const ENUM_FIELDS := {
 	"card_mode": ["res://src/core/consts/const_level_data.gd", "E_CardMode", "ConstLevelData"],
 	"pot_mode": ["res://src/core/consts/const_level_data.gd", "E_PotMode", "ConstLevelData"],
 	"plant_type": ["res://src/core/autoload/character_registry.gd", "PlantType", "CharacterRegistry"],
-	"pointer_target": ["res://data/tutorial/tutorial_step.gd", "E_PointerTarget", "ResourceTutorialStep"],
-	"finish_type": ["res://data/tutorial/tutorial_step.gd", "E_FinishType", "ResourceTutorialStep"],
-	## 出怪表是**枚举数组**：`prefab.start_battle(10, [1, 3])` 这种写法同样会触发
+	## 出怪表是**枚举数组**：`start_battle(10, [1, 3])` 这种写法同样会触发
 	## INT_AS_ENUM_WITHOUT_CAST（这类警告只在 Godot 编辑器输出面板里报，无头跑批完全安静，
 	## 2026-10-03 全仓扫出 154 处），所以逐元素换成员名交给 _enumed_array()
 	"zombie_refresh_types": ["res://src/core/autoload/character_registry.gd", "ZombieType", "CharacterRegistry"],
@@ -213,7 +212,7 @@ func _gen_flow(p: Dictionary, ctx: Dictionary) -> Array[String]:
 	for sid in _sub_ids_in(events):
 		var ev: Dictionary = (p.subs as Dictionary).get(sid, {})
 		var script_path := _ext_path(ev.script_path, p.exts)
-		var method: String = EVENT_PREFAB.get(script_path.get_file(), "")
+		var method: String = EVENT_METHOD.get(script_path.get_file(), "")
 		if method == "":
 			lines.append("\t## [未识别的事件] %s" % script_path.get_file())
 			continue
@@ -226,12 +225,12 @@ func _gen_flow(p: Dictionary, ctx: Dictionary) -> Array[String]:
 			var raw := _prop_value(ev, arg_name)
 			if raw != "":
 				args.append(_enumed_array(arg_name, _value(raw, ctx)))
-		var call := "await prefab.%s(%s)" % [method, ", ".join(args)]
+		var call := "await %s(%s)" % [method, ", ".join(args)]
 		if _has_prop(ev, "is_first_round_only", "true"):
-			## 教程：播不播交给关卡脚本的 should_run_tutorial()（已通关过就跳过）
+			## 教程：播不播由关卡脚本自己判（已通关过就跳过，见 LevelScriptBase.is_curr_level_success）
 			var cond := "mg.curr_game_round == 1"
 			if method == "tutorial":
-				cond += " and should_run_tutorial(mg)"
+				cond += " and not is_curr_level_success()"
 			lines.append("\tif %s:" % cond)
 			lines.append("\t\t## %s（仅第 1 轮）" % note)
 			lines.append("\t\t" + call)

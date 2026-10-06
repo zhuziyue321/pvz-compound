@@ -20,9 +20,8 @@ var drop_unlock_wave :int = -1
 ## 每秒进度条更新计时器
 @onready var every_wave_progress_timer: Timer = $EveryWaveProgressTimer
 
-## 关卡进度条
-@onready var flag_progress_bar: FlagProgressBar = %FlagProgressBar
-## 大波时文字提醒
+## 关卡进度条不再由本管理器直接写：进度口径归 `LevelProgressBarController` + 它的数据源，
+## 出怪侧只把自己的战斗进度（下面这一组 get_* / take_*）报出去（见 ZombieManager 的「波次进度」区）
 @onready var ui_remind_word: UIRemindWord = %UIRemindWord
 
 ## 大波僵尸时墓碑生产的僵尸类型
@@ -44,6 +43,17 @@ var curr_wave := -1
 var progress_bar_segment_every_wave:float
 ## 每段根据当前波次时间，每秒多长
 var progress_bar_segment_mini_every_sec:float
+
+#region 战斗进度（关卡进度条默认就是它，由数据源每帧读一次）
+## 当前战斗进度（0~100）：本波起点 + 本波随时间推进的部分
+var battle_progress := 0.0
+## 第一波是否已经开打（开打前进度条不显示）
+var is_wave_started := false
+## 本帧要升旗的旗帜下标（-1 = 不升），被读走后清掉
+var _flag_to_raise := -1
+## 本帧是否要把旗帜全部收起（多轮游戏切新一轮），被读走后清掉
+var _is_flag_reset_pending := false
+#endregion
 
 ## 波次刷新信号,给zombie_manager,删除魅惑僵尸，更新是否为最后一波
 signal signal_wave_refresh(is_end_wave:bool)
@@ -70,7 +80,7 @@ func init_zombie_wave_manager(game_para:ResourceLevelData):
 		curr_wave = -1
 		max_wave = game_para.max_wave
 
-	flag_progress_bar.init_flag_from_wave(max_wave_one_round)
+	## 旗帜数量由进度条控制器按 get_flag_num() 自己建，本管理器只管算进度
 	## 关卡 max_wave 配成 1 时 (max_wave_one_round - 1) 为 0，会得到 INF/NaN
 	progress_bar_segment_every_wave = 100.0 / max(1, max_wave_one_round - 1)
 
@@ -79,7 +89,7 @@ func init_zombie_wave_manager(game_para:ResourceLevelData):
 ## 开战前改写本关波数：**关卡流程的「开战」事件带 max_wave 时走这里**
 ## （见 LevelTimelineEventStartBattle._apply_battle_para）
 ## 本管理器在 init_manager() 阶段就按关卡数据读过一遍，这里要把那一次的结果一起改掉：
-## 波数、进度条每波占比、进度条上的旗帜数量
+## 波数、进度条每波占比（旗帜数量会跟着 get_flag_num() 变，控制器自己重建）
 func apply_max_wave(wave_num: int) -> void:
 	if wave_num <= 0 or wave_num == max_wave_one_round:
 		return
@@ -89,26 +99,21 @@ func apply_max_wave(wave_num: int) -> void:
 	max_wave_one_round = wave_num
 	## 关卡 max_wave 配成 1 时 (max_wave_one_round - 1) 为 0，会得到 INF/NaN
 	progress_bar_segment_every_wave = 100.0 / max(1, wave_num - 1)
-	flag_progress_bar.init_flag_from_wave(wave_num)
 
 
 ## 多轮游戏开始下一轮僵尸波次管理器更新数据
 func start_next_game_zombie_wave_mananger_update():
 	max_wave += max_wave_one_round
-	flag_progress_bar.start_next_game_flag_progress_bar_update()
-	flag_progress_bar.visible = false
+	## 新一轮从 0 起步，旗帜全部收起（控制器读到请求后降旗，进度条自己平滑走回去）
+	battle_progress = 0.0
+	is_wave_started = false
+	_is_flag_reset_pending = true
 	zombie_wave_create_manager.update_zombie_refresh_types()
 
-## 计算当前进度并更新进度条
+## 计算当前进度（只算不写：进度条由控制器每帧来取，见 get_battle_progress）
 func set_progress_bar(curr_flag:int=-1):
-	var curr_progress = curr_wave % max_wave_one_round * progress_bar_segment_every_wave
-	flag_progress_bar.set_progress(curr_progress, curr_flag)
-
-## 开始第一波
-func start_first_wave():
-	start_next_wave()
-	every_wave_progress_timer.start()
-	flag_progress_bar.visible = true
+	battle_progress = curr_wave % max_wave_one_round * progress_bar_segment_every_wave
+	_flag_to_raise = curr_flag
 
 ## 开始刷新下一波,发射刷新下一波信号
 func start_next_wave() -> void:
@@ -197,7 +202,34 @@ func update_progress_bar_segment_mini_every_sec(time:float):
 
 	progress_bar_segment_mini_every_sec = progress_bar_segment_every_wave / time
 
-## 随时间每秒更新进度条
+## 随时间每秒推进战斗进度（进度条由控制器每帧来取）
 func _on_every_wave_progress_timer_timeout() -> void:
-	# 每秒进度条增加对应的进度值
-	flag_progress_bar.set_progress_add_every_sec(progress_bar_segment_mini_every_sec)
+	# 每秒进度增加对应的进度值
+	battle_progress = clampf(battle_progress + progress_bar_segment_mini_every_sec, 0.0, 100.0)
+
+
+#region 战斗进度查询（关卡进度条的数据源从这里取，见 ZombieManager 的同名转发）
+## 当前战斗进度百分比（0~100）
+func get_battle_progress() -> float:
+	return clampf(battle_progress, 0.0, 100.0)
+
+## 本关的波次是否已经开打（开打前进度条不显示）
+func is_battle_started() -> bool:
+	return is_wave_started
+
+## 进度条上要画几面旗帜（每 10 波一面）
+func get_flag_num() -> int:
+	return max_wave_one_round / 10
+
+## 取走「本帧要升旗」的旗帜下标（-1 = 不升）
+func take_flag_raise_index() -> int:
+	var flag_i := _flag_to_raise
+	_flag_to_raise = -1
+	return flag_i
+
+## 取走「本帧要收起所有旗帜」的请求
+func take_flag_reset() -> bool:
+	var is_reset := _is_flag_reset_pending
+	_is_flag_reset_pending = false
+	return is_reset
+#endregion

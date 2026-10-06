@@ -5,7 +5,7 @@ extends LevelScriptBase
 ## 原 .tres 上的 timeline 事件数组已按原顺序平铺成 run_flow() 里的 await 序列。
 
 
-## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 prefab.dave_dialog
+## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 dave_dialog
 ## 原版冒险模式 2-5 开场（锤僵尸关：戴夫拿「打地鼠」作比介绍本关玩法）
 ## 数据来源: PVZ Wiki(https://plantsvszombies.wiki.gg/wiki/Level_2-5?action=raw) 的 Dialogue 段
 ## 中文台词按游戏中文版语音转写(https://www.ximalaya.com/ask/a23193331)，与 wiki 英文原文逐句对应
@@ -43,7 +43,7 @@ func _init() -> void:
 	init_tombstone_num = 9
 	max_choosed_card_num = 3
 	start_sun = 0
-	pre_choosed_card_list_plant.assign([5, 12, 3])
+	prechosen_cards = ResourceCardReference.create_plant_list([5, 12, 3])
 
 
 ## 进关时装上「锤僵尸」玩法（与迷你游戏 15 共用同一条规则，见 LevelRuleHammerZombie）
@@ -53,20 +53,16 @@ func init_level_items(mg: MainGameManager, _item_root: Node2D) -> void:
 
 func run_flow(_mg: MainGameManager) -> void:
 	## 关卡戴夫对话
-	await prefab.dave_dialog(_build_dave_dialog())
+	await dave_dialog(_build_dave_dialog())
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(10, [
+	await start_battle(10, [
 		CharacterRegistry.ZombieType.Z001Norm,
 		CharacterRegistry.ZombieType.Z003Cone,
 		CharacterRegistry.ZombieType.Z005Bucket,
 	])
 
 
-## 本关有开场戴夫对话：对话在 run_flow() 里现场构造（见 _build_dave_dialog），
-## 这里只做声明 —— 有对话就不再播戴夫推销卡槽扩充（见 is_dave_sell_possible）
-func has_dave_dialog() -> bool:
-	return true

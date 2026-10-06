@@ -1,4 +1,4 @@
-[gd_scene load_steps=92 format=3 uid="uid://b2soejmoqi7wd"]
+[gd_scene load_steps=93 format=3 uid="uid://b2soejmoqi7wd"]
 
 [ext_resource type="Script" uid="uid://c7dr2016dfdoo" path="res://src/managers/main_game_manager.gd" id="1_7dde3"]
 [ext_resource type="Script" uid="uid://b2rst408m72au" path="res://src/managers/hand_manager/hand_manager.gd" id="3_acpf0"]
@@ -83,6 +83,7 @@
 [ext_resource type="Texture2D" uid="uid://cev77yt3o6wn5" path="res://assets/image/ui/ui_trophy/AwardRays2.png" id="99_rays2"]
 [ext_resource type="Script" path="res://src/managers/hand_manager/component/hand_component_hammer.gd" id="48_hammercp"]
 [ext_resource type="PackedScene" uid="uid://3anktsw826yt" path="res://src/items/mini_game/hammer.tscn" id="48_hammerscene"]
+[ext_resource type="Script" path="res://src/ui/main_game_ui/ui_level_progress_bar_controller.gd" id="60_progressctrl"]
 
 [sub_resource type="Resource" id="ResourceLevelData_gamepara"]
 script = ExtResource("91_gamepara")
@@ -682,6 +683,10 @@ grow_horizontal = 0
 text = "当前为10轮"
 label_settings = SubResource("LabelSettings_b2sx0")
 horizontal_alignment = 2
+
+[node name="LevelProgressBarController" type="Node" parent="CanvasLayerUI"]
+unique_name_in_owner = true
+script = ExtResource("60_progressctrl")
 
 [node name="All_UI" type="Control" parent="CanvasLayerUI"]
 process_mode = 3
@@ -1438,6 +1443,13 @@ z_index = 4001
 [node name="Suns" type="Node2D" parent="."]
 unique_name_in_owner = true
 z_index = 4002
+
+[node name="Items" type="Node2D" parent="."]
+unique_name_in_owner = true
+
+[node name="ZombieBossRoot" type="Node2D" parent="."]
+unique_name_in_owner = true
+z_index = 4000
 
 [node name="Camera2D" type="Camera2D" parent="."]
 unique_name_in_owner = true

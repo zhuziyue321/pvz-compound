@@ -18,12 +18,12 @@ func _init() -> void:
 	camera_init_x = MainGameCamera.CAM_POS_ORI.x
 	zombie_multy = 3
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	1001: 2,
 	1002: 1,
 	1003: 1
 	})
-	card_order_plant.assign({
+	conveyor_order = ResourceCardReference.create_plant_order({
 	0: 1001,
 	1: 1002,
 	2: 1003
@@ -40,10 +40,10 @@ func _init() -> void:
 func run_flow(mg: MainGameManager) -> void:
 	if mg.curr_game_round == 1:
 		## 保龄球红线（仅第 1 轮）
-		await prefab.bowling_stripe()
+		await bowling_stripe()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20)
+	await start_battle(20)

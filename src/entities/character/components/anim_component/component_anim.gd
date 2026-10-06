@@ -16,7 +16,7 @@ var animation_origin_speed :float = -1
 ## 获取动画原始速度
 func get_animation_origin_speed():
 	if animation_origin_speed == -1:
-		push_error("动画速度为-1")
+		Log.error("动画速度为-1")
 	return animation_origin_speed
 
 ## 设置初始化速度(伴舞使用)

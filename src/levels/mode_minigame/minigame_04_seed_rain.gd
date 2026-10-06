@@ -19,18 +19,15 @@ var seed_rain_slot: CardSlotSeedRain
 
 func _init() -> void:
 	save_key = "102_0_0004"
-	game_sences = MainSceneRegistry.MainScenes.MainGameBack
-	game_BG = ConstLevelData.GameBg.Fog
-	game_BGM = ConstLevelData.GameBGM.Fog
-	is_fog = true
+	## 场景：泳池·浓雾 —— 槽位 / 底图 / BGM / 雾 / 昼夜 / 天降阳光全由场景脚本给出
+	scene_name = SceneSettingRegistry.SCENE_FOG
+	## 覆盖场景默认：本关（种子雨）在原版是雨天
 	is_rain = true
-	is_day = false
-	is_day_sun = false
 	can_choosed_card = false
 	zombie_multy = 4
 	card_mode = ConstLevelData.E_CardMode.Null
 	is_seed_rain = true
-	all_card_plant_type_probability_seed_rain.assign({
+	seed_rain_weights = ResourceCardWeight.create_plant_weights({
 	1: 2,
 	3: 1,
 	4: 2,
@@ -45,7 +42,7 @@ func _init() -> void:
 	28: 2,
 	44: 1
 	})
-	card_order_plant_seed_rain.assign({
+	seed_rain_order = ResourceCardReference.create_plant_order({
 	0: 17,
 	5: 44
 	})
@@ -67,19 +64,19 @@ func run_flow(mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 不选卡时相机停留
-	await prefab.wait(3.0)
+	await wait(3.0)
 	## 相机归位
-	await prefab.camera_back()
+	await camera_back()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 天降种子卡：本关专属，开战起、打完停
 	_start_seed_rain(mg)
 	## 开战
-	await prefab.start_battle(-1, zombie_list)
+	await start_battle(-1, zombie_list)
 	_pause_seed_rain()
 
 

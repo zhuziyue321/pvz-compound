@@ -4,9 +4,9 @@ extends RefCounted
 ## 用法：powershell -ExecutionPolicy Bypass -File test/run_autopilot.ps1 -Scenario probe_slot_machine -Windowed
 ##
 ## 覆盖：
-##   ① UI 落位：只服务这一关的 UI 已从 `src/ui/mini_game/` 挪到
-##      `src/levels/script/mini_game/slot_machine/` —— 旧路径不存在、新路径能实例化出 SlotMachineUI，
-##      且它没有被 LevelRegistry 当成一关（`script/` 目录被扫描器跳过）
+##   ① UI 落位：只服务这一关的 UI 已挪到关卡脚本同目录
+##      `src/levels/mode_minigame/minigame_03_slot_machine_ui.gd` —— 旧路径不存在、新路径能实例化出
+##      SlotMachineUI，且它没有被 LevelRegistry 当成一关（识别走继承链白名单，见 is_level_script）
 ##   ② 开局：本关不选卡 / 没铲子 / 没小推车 / 没 zombies；UI 挂在 CanvasLayerUI 下，
 ##      本金 2000 阳光、目标「累计收集 2000」
 ##   ③ 拉杆：真点一次拉杆（屏幕中心真实鼠标）→ 扣 25 阳光、转轮停下、结果必居其一
@@ -19,7 +19,7 @@ extends RefCounted
 
 const LEVEL := "res://src/levels/mode_minigame/minigame_03_slot_machine.gd"
 ## 本次搬家后的 UI 路径（验收项：src/ui/ 下不再有它的踪影）
-const UI_PATH := "res://src/levels/script/mini_game/slot_machine/slot_machine_ui.gd"
+const UI_PATH := "res://src/levels/mode_minigame/minigame_03_slot_machine_ui.gd"
 const OLD_UI_PATH := "res://src/ui/mini_game/slot_machine_ui.gd"
 const TARGET_SUN := 2000
 const SPIN_COST := 25

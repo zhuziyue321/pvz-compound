@@ -6,18 +6,15 @@ extends LevelScriptBase
 
 
 func _init() -> void:
-	game_sences = MainSceneRegistry.MainScenes.MainGameBack
-	game_BG = ConstLevelData.GameBg.Fog
+	## 场景：泳池·浓雾 —— 槽位 / 底图 / 雾 / 昼夜 / 天降阳光全由场景脚本给出
+	scene_name = SceneSettingRegistry.SCENE_FOG
+	## 覆盖场景默认：原版 4-10 是雷雨夜（屏幕压暗，打雷时亮一下），且不放 BGM
 	game_BGM = ConstLevelData.GameBGM.NoBGM
-	## 原版 4-10 是雷雨黑夜浓雾关:屏幕压暗,打雷时亮一下
-	is_fog = true
 	is_rain = true
 	is_lightning = true
-	is_day = false
-	is_day_sun = false
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
 	## 传送带卡池(原版 4-10): 莲叶17 / 海蘑菇25 / 仙人掌27 / 裂荚29 / 杨桃30 / 南瓜头31 / 磁力菇32
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	17: 2,
 	25: 2,
 	27: 2,
@@ -41,12 +38,12 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20, zombie_list)
+	await start_battle(20, zombie_list)

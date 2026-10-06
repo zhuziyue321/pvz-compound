@@ -9,7 +9,7 @@ func _init() -> void:
 	game_BGM = ConstLevelData.GameBGM.UltimateBattle
 	is_day_sun = false
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	1: 2,
 	3: 2,
 	4: 2,
@@ -22,12 +22,12 @@ func _init() -> void:
 
 func run_flow(_mg: MainGameManager) -> void:
 	## 展示僵尸
-	await prefab.show_zombie()
+	await show_zombie()
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20)
+	await start_battle(20)

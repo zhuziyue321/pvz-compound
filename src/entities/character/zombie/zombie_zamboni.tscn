@@ -39,7 +39,7 @@
 [ext_resource type="Texture2D" uid="uid://dtu8sxebvqhwp" path="res://assets/reanim/Zombie_charred_zamboni4.png" id="27_5rl58"]
 [ext_resource type="Texture2D" uid="uid://nnp13qryaqjx" path="res://assets/image/particles/ExplosionCloud.png" id="27_ujpb2"]
 [ext_resource type="Texture2D" uid="uid://bf7v5a4v2jnil" path="res://assets/reanim/Zombie_charred_zamboni5.png" id="28_yuhtx"]
-[ext_resource type="Texture2D" uid="uid://ciojwsa7ag0s4" path="res://assets/reanim/Zombie_charred_zamboni6 .png" id="29_xvg1s"]
+[ext_resource type="Texture2D" uid="uid://bnovj8cuowh4k" path="res://assets/reanim/Zombie_charred_zamboni6.png" id="29_xvg1s"]
 [ext_resource type="Texture2D" uid="uid://b7u3lecrkunf3" path="res://assets/reanim/Zombie_charred_zamboni7.png" id="30_da3wv"]
 [ext_resource type="Texture2D" uid="uid://bgrsblnq2ycas" path="res://assets/reanim/Zombie_charred_zamboni8.png" id="31_xxx3k"]
 [ext_resource type="Texture2D" uid="uid://dnl0neopj3gbf" path="res://assets/reanim/Zombie_charred_zamboni9.png" id="32_tpe2y"]

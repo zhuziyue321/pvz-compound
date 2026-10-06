@@ -51,6 +51,28 @@ func click(x: float, y: float) -> void:
 	_report.line("[操作] 点击 (%d, %d)" % [int(x), int(y)])
 
 
+## 按住 (x1,y1) 拖到 (x2,y2) 再松手：合成真实的一串「按下 → 移动 → 松开」。
+## 拖动类玩法（僵尸迷阵的交换）只认这一串，点两下不算 —— 中间补 steps 个移动帧，
+## 让被拖的一方有机会在**松手前**就检测到位移（松手才判的实现也能被最后那一帧覆盖）。
+func drag(x1: float, y1: float, x2: float, y2: float, steps: int = 4) -> void:
+	var from := Vector2(x1, y1)
+	var to := Vector2(x2, y2)
+	Input.warp_mouse(from)
+	await _clock.frames(1)
+	_send_motion(from)
+	await _clock.frames(2)
+	Input.parse_input_event(_mouse_button(from, true))
+	await _clock.frames(2)
+	for i in range(1, steps + 1):
+		var pos := from.lerp(to, float(i) / float(steps))
+		Input.warp_mouse(pos)
+		_send_motion(pos)
+		await _clock.frames(1)
+	Input.parse_input_event(_mouse_button(to, false))
+	await _clock.frames(2)
+	_report.line("[操作] 拖动 (%d, %d) -> (%d, %d)" % [int(x1), int(y1), int(x2), int(y2)])
+
+
 ## 点击第一个【完整路径】含 pattern 的可见可点控件
 func click_first(pattern: String, index: int = 0) -> bool:
 	var found := _probe.find_clickable(pattern, true)
@@ -83,18 +105,24 @@ func click_node(path: String) -> void:
 
 ## 点击草坪格子。[row] 0 = 最上面一行，[col] 0 = 最左一列（= row_col.y）
 func click_plant_cell(row: int, col: int) -> bool:
-	var cell := _probe.plant_cell_node(row, col)
-	if cell == null:
-		_report.line("!! 没有格子 row=%d col=%d（不在关卡内？）" % [row, col])
+	## 显式写 Variant：_plant_cell_center 取不到格子时返回 null，标 := 会被当成「从 Variant 推断」告警
+	var c: Variant = _plant_cell_center(row, col)
+	if c == null:
 		return false
-	var btn: Control = cell.get_node_or_null("Button")
-	if btn == null:
-		_report.line("!! 格子没有 Button: " + str(cell.get_path()))
-		return false
-	var c := AutopilotProbe.screen_center_of(btn)
-	_report.line("[种植] 点击 row=%d col=%d -> %s 屏幕中心 %s (rect 中心 %s)" % [
-		row, col, str(cell.get_path()), str(c), str(btn.get_global_rect().get_center())])
 	await click(c.x, c.y)
+	return true
+
+
+## 从草坪格子 (row1,col1) 拖到 (row2,col2)（拖动类玩法用，见 drag）
+func drag_plant_cell(row1: int, col1: int, row2: int, col2: int) -> bool:
+	## 显式写 Variant：取不到格子时这里是 null，标成 Vector2 会在赋值那一步就报错
+	var from: Variant = _plant_cell_center(row1, col1)
+	var to: Variant = _plant_cell_center(row2, col2)
+	if from == null or to == null:
+		return false
+	_report.line("[拖动] row=%d col=%d -> row=%d col=%d  屏幕 %s -> %s" % [
+		row1, col1, row2, col2, str(from), str(to)])
+	await drag(from.x, from.y, to.x, to.y)
 	return true
 
 #endregion
@@ -170,6 +198,29 @@ func _send_motion(pos: Vector2) -> void:
 	motion.position = pos
 	motion.global_position = pos
 	Input.parse_input_event(motion)
+
+
+## 一个左键按下 / 松开的事件（click 与 drag 共用）
+func _mouse_button(pos: Vector2, pressed: bool) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = pressed
+	event.position = pos
+	event.global_position = pos
+	return event
+
+
+## 草坪格子 Button 在「屏幕上真正能点到」的中心；取不到返回 null（只记一行事实，不抛异常）
+func _plant_cell_center(row: int, col: int) -> Variant:
+	var cell := _probe.plant_cell_node(row, col)
+	if cell == null:
+		_report.line("!! 没有格子 row=%d col=%d（不在关卡内？）" % [row, col])
+		return Vector2.ZERO
+	var btn: Control = cell.get_node_or_null("Button")
+	if btn == null:
+		_report.line("!! 格子没有 Button: " + str(cell.get_path()))
+		return Vector2.ZERO
+	return AutopilotProbe.screen_center_of(btn)
 
 
 ## 按路径取节点；找不到只记一行事实，不抛异常（驾驶脚本不该因为找不到节点就崩）

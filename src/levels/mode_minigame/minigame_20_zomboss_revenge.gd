@@ -9,7 +9,7 @@ extends LevelScriptBase
 ##
 ## ⚠️ 空实现：骨架照抄 adventure_05_10，僵王的「复仇版」参数还没接：
 ##   TODO(僵尸博士的复仇) 原版僵王血量是 5-10 的**两倍**，且放僵尸更频繁；
-##                     血量在 zombie_boss.gd / LevelTimelineEventSpawnZomboss 上，本关还没法单独覆盖
+##                     血量在僵王场景的 HpComponent 上；要调就改 CharacterRegistry.ZombieBossInfo / 僵王场景
 
 
 func _init() -> void:
@@ -25,13 +25,19 @@ func _init() -> void:
 	is_bungi = true
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
 	monster_mode = ConstLevelData.E_MonsterMode.Null
-	is_zomboss_fight = true
+	## 僵王博士：与冒险 5-10 同口径，开战时自动出场，胜利条件为「打死僵王」
+	boss_type = CharacterRegistry.ZombieBossType.ZB001Doctor
+	boss_spawn_wave = 0
+	## 原版「僵尸博士的复仇」僵王血量 60000；破损阈值按上限比例缩放为 30000 / 15000
+	boss_hp = 60000
+	## 出生点固定：由 ZB000Base.FIXED_SPAWN_POSITION 硬编码，关卡不再配置。
+	win_on_boss_death = true
 	## 出怪预览为空：与冒险 5-10 同口径，本关不自然出怪（僵尸全由僵王投放），
 	## 原版开局那段「看僵尸」一只不出，连「镜头右移看僵尸」也不跑
 	look_show_zombie = false
 	## 没有预览这段镜头，进关就停在归位位（否则整段登场都在拍左侧房子）
 	camera_init_x = MainGameCamera.CAM_POS_ORI.x
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	33: 2,
 	34: 2,
 	35: 2,
@@ -39,23 +45,11 @@ func _init() -> void:
 	21: 2,
 	15: 2
 	})
-	## 屋顶要花盆才能种：先给每一行摆一个（与 adventure_05_10 同一套写法）
-	var pre_plant_in_level_0 := PrePlantResource.new()
-	pre_plant_in_level_0.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_0.plant_cell_pos = Vector2i(0, 1)
-	var pre_plant_in_level_1 := PrePlantResource.new()
-	pre_plant_in_level_1.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_1.plant_cell_pos = Vector2i(0, 2)
-	var pre_plant_in_level_2 := PrePlantResource.new()
-	pre_plant_in_level_2.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_2.plant_cell_pos = Vector2i(0, 3)
-	var pre_plant_in_level_3 := PrePlantResource.new()
-	pre_plant_in_level_3.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_3.plant_cell_pos = Vector2i(0, 4)
-	all_pre_plant_data.assign([pre_plant_in_level_0, pre_plant_in_level_1, pre_plant_in_level_2, pre_plant_in_level_3])
 
 
 func run_flow(_mg: MainGameManager) -> void:
+	## 夜屋顶要花盆才能种：先给左侧 4 列铺上（与 adventure_05_10 同一套写法）
+	await plant_flower_pot_columns(4)
 	## 出怪表：本关的僵尸全部由僵王投放，这里列出的是它手里的牌
 	var zombie_list: Array[CharacterRegistry.ZombieType] = [
 		CharacterRegistry.ZombieType.Z001Norm,
@@ -74,13 +68,14 @@ func run_flow(_mg: MainGameManager) -> void:
 
 	## 没有僵尸预览：本关不自然出怪，出怪预览为空（look_show_zombie = false），
 	## 连「镜头右移看僵尸 / 移回相机」这两步一起不跑，直接进僵王登场
-	## 生成僵尸博士：本关的僵尸全部由它投放
-	await prefab.spawn_zomboss()
-	## 等僵王登场动画落位再往下走
-	await prefab.wait(3.0)
+	## 僵王由 ZombieManager 在开战那一刻出场（boss_spawn_wave = 0），关卡脚本不放它进场
 	## 准备-安放-植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
+	## 僵王战：传送带出卡间隔减半（出卡速度翻倍），与冒险 5-10 同一套 boss 战口径
+	_mg.card_manager.set_conveyor_card_interval_scale(0.5)
+	## 僵王战传送带权重：场上空花盆少了就少给花盆，带上花盆堆到 4 个就把位置让给寒冰菇 / 辣椒
+	_mg.card_manager.add_conveyor_weight_rule(ZombossConveyorWeightRule.new())
 	## 开战
-	await prefab.start_battle(-1, zombie_list)
+	await start_battle(-1, zombie_list)

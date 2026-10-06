@@ -276,18 +276,18 @@ static func convert_to_unified_format(items: Array) -> Array[Dictionary]:
 		var weight: float
 		if item is Array:
 			if item.size() < 2:
-				push_error("Invalid array format: %s" % str(item))
+				Log.error("Invalid array format: %s" % str(item))
 				continue
 			data = item[0]
 			weight = float(item[1])
 		elif item is Dictionary:
 			if not (item.has("data") and item.has("weight")):
-				push_error("Invalid dictionary format: %s" % str(item))
+				Log.error("Invalid dictionary format: %s" % str(item))
 				continue
 			data = item["data"]
 			weight = float(item["weight"])
 		else:
-			push_error("Unsupported item type: %s" % str(item))
+			Log.error("Unsupported item type: %s" % str(item))
 			continue
 		converted.append({"data": data, "weight": weight})
 	return converted

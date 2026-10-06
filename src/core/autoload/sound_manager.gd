@@ -183,6 +183,12 @@ const SFXCharacterMap := {
 	&"bossboulderattack":preload("res://assets/audio/sounds/bossboulderattack.ogg"),
 	## 僵王博士爆炸（死亡）
 	&"bossexplosion":preload("res://assets/audio/sounds/bossexplosion.ogg"),
+	## 僵王博士低头 / 抬头的液压动作
+	&"hydraulic":preload("res://assets/audio/sounds/hydraulic.ogg"),
+	## 僵王博士放置僵尸及蹦极时的手臂动作
+	&"hydraulic_short":preload("res://assets/audio/sounds/hydraulic_short.ogg"),
+	## 僵王博士丢车时的投掷动作
+	&"RVthrow":preload("res://assets/audio/sounds/RVthrow.ogg"),
 	## 海豚僵尸入场
 	&"dolphin_appears":preload("res://assets/audio/SFX/zombie/dolphin_appears.ogg"),
 	## 海豚僵尸跳跃
@@ -301,7 +307,12 @@ func play_bullet_attack_SFX(type_bullet_sfx:TypeBulletSFX):
 	play_sfx_with_pool(sfx_selected)
 
 ## 播放植物\僵尸相关音效
+## 音效名多来自动画帧事件（play_animation_sfx），字典里查不到时只告警不崩溃，
+## 避免一份动画资源引用了未登记的音效就中断整局游戏。
 func play_character_SFX(option:StringName):
+	if not SFXCharacterMap.has(option):
+		Log.warn("SoundManager：SFXCharacterMap 未登记音效 ", option)
+		return null
 	var sfx_resource:AudioStream
 	if SFXCharacterMap[option] is Array:
 		sfx_resource = SFXCharacterMap[option].pick_random()

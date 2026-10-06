@@ -37,7 +37,7 @@ func _init() -> void:
 	start_sun = 0
 	## 打地鼠小游戏（原版）：出战卡固定 3 张，卡槽数 = 固定卡数
 	max_choosed_card_num = 3
-	pre_choosed_card_list_plant.assign([15, 12, 5])
+	prechosen_cards = ResourceCardReference.create_plant_list([15, 12, 5])
 	## 难度参数不在本关另立一套：原版口径是「2-5 的加强版」，而锤僵尸模式只认自己那三个僵尸转速字段
 	## （不读普通出怪的 zombie_multy / max_wave），本关沿用 2-5 的默认值：
 	##   speed_zombie_init —— 第 1 波僵尸的起身倍率（默认 1.0）
@@ -54,10 +54,10 @@ func init_level_items(mg: MainGameManager, _item_root: Node2D) -> void:
 func run_flow(_mg: MainGameManager) -> void:
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
 	## ⚠️ 这里**不要**给出怪表：锤僵尸出怪模式（`HammerZombieManager`）走自己的僵尸候选
 	## （普通 → 第 4 波起加路障 → 第 6 波起加铁桶），正好是原版「1 下 / 2 下 / 3 下」那三种，
 	## 关卡数据上的 zombie_refresh_types 在本模式下**不会被读**，写了也只是摆着。
-	await prefab.start_battle()
+	await start_battle()

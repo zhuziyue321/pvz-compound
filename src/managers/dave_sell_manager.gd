@@ -4,8 +4,11 @@ class_name DaveSellManager
 ##
 ## 触发范围(见 is_can_sell()):冒险模式 + 本关序号 >= 2-2(ConstUnlockLevel.DAVE_SELL_ADVENTURE_LEVEL)
 ## + 商店尚未解锁(通关 3-4 之前) + 本关可以选卡 + 卡槽还没到上限。
-## 本关有戴夫对话时（关卡资源字段 crazy_dave_dialog，或关卡脚本在 run_flow() 里现场构造
-## 并覆写 has_dave_dialog()）让位给关卡对话。
+## **什么时候推销由关卡脚本说了算**:2-2 ~ 3-4 这几关在 run_flow() 开头写一行
+## `await dave_sell_card_slot()`(见 LevelScriptBase),本关有戴夫对话的关卡不写这一句
+## —— 免得一关开场连播两段戴夫。
+## 金币不够当前档价时戴夫不出现(2-2 例外:预告一次"攒到 $N 我就卖给你"),
+## 所以那句快捷工具可以放心写在每一关的流程里,**只在钱足够时才真推销**。
 ##
 ## 本仓库的推销节奏(对齐原版"攒够了就来烦你"):
 ##   1. 2-2 开场:无论钱够不够,戴夫都出现。钱够就当场推销;
@@ -74,11 +77,6 @@ func is_can_sell() -> bool:
 	if main_game == null or main_game.game_para == null:
 		return false
 	var game_para: ResourceLevelData = main_game.game_para
-	## 本关有戴夫对话(资源字段配的,或关卡脚本在 run_flow 里现场构造的):
-	## 以关卡对话为准,避免一关开场连播两段戴夫
-	if game_para.has_dave_dialog():
-		Log.debug("本关已配置关卡戴夫对话,跳过夜晚推销")
-		return false
 	## 只有冒险模式的出战卡槽吃商店 / 推销的扩充(见 ResourceLevelData.get_max_choosed_card_num)
 	if game_para.game_mode != MainSceneRegistry.MainScenes.ChooseLevelAdventure:
 		return false
@@ -86,6 +84,7 @@ func is_can_sell() -> bool:
 	if _get_curr_adventure_level() < ConstUnlockLevel.DAVE_SELL_ADVENTURE_LEVEL:
 		return false
 	## 商店解锁(通关 3-4)后卡槽扩充改由商店出售,戴夫不再开场推销
+	## (关卡数据侧 ResourceLevelData.is_dave_sell_possible() 也判了一次,两处互为保险)
 	if Global.global_game_state.is_shop_unlocked():
 		return false
 	## 不能选卡的关卡(传送带 / 不可选卡)买了卡槽也没有地方用

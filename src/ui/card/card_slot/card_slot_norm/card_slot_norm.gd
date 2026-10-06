@@ -25,38 +25,61 @@ func init_card_slot_norm(game_para:ResourceLevelData):
 	for i in card_slot_candidate.all_card_candidate_containers_zombie:
 		var card:Card = card_slot_candidate.all_card_candidate_containers_zombie[i].card
 		card.signal_card_click.connect(_on_card_click.bind(card))
+	for i in card_slot_candidate.all_card_candidate_containers_boss:
+		var card:Card = card_slot_candidate.all_card_candidate_containers_boss[i].card
+		card.signal_card_click.connect(_on_card_click.bind(card))
 	for i in card_slot_candidate.all_card_candidate_containers_plant_imitater:
 		var card:Card = card_slot_candidate.all_card_candidate_containers_plant_imitater[i].card
 		card.signal_card_click.connect(_on_imitater_card_click.bind(card))
 
 	## 初始化预选卡
-	if game_para.pre_choosed_card_list_plant or game_para.pre_choosed_card_list_zombie:
-		init_pre_choosed_card(game_para.pre_choosed_card_list_plant, game_para.pre_choosed_card_list_zombie)
+	if not game_para.prechosen_cards.is_empty():
+		init_pre_choosed_card(game_para.prechosen_cards)
 
 # 重选上次卡片
+## 存档条目为 {card_type, content_id, is_imitater}（见 ResourceCardReference.to_dict）。
 func _on_re_card_button_pressed() -> void:
 	Global.save_service.load_selected_cards()
 	for card_type_data:Dictionary in Global.global_game_state.selected_cards:
-		if card_type_data.has("plant_type"):
-			var plant_type:CharacterRegistry.PlantType = card_type_data["plant_type"]
-			## 如果是模仿者
-			if card_type_data.get("is_imitater", false):
-				## 未选择模仿者时
-				if not card_slot_candidate.card_imitater.is_be_choosed_imitater:
-					card_slot_candidate.all_card_candidate_containers_plant_imitater[AllCards.plant_card_ids[plant_type]].card._on_button_pressed()
-			else:
-				if not card_slot_candidate.all_card_candidate_containers_plant[AllCards.plant_card_ids[plant_type]].card.is_choosed_pre_card:
-					card_slot_candidate.all_card_candidate_containers_plant[AllCards.plant_card_ids[plant_type]].card._on_button_pressed()
-
-		elif card_type_data.has("zombie_type"):
-			## 僵尸卡片隐藏时（ZOMBIE_CARD_ENABLED=false）跳过：待选卡槽里根本没有僵尸卡容器
-			if not ConstFeatureSwitch.ZOMBIE_CARD_ENABLED:
-				continue
-			var zombie_type:CharacterRegistry.ZombieType = card_type_data["zombie_type"]
-			if not card_slot_candidate.all_card_candidate_containers_zombie.has(AllCards.zombie_card_ids[zombie_type]):
-				continue
-			if not card_slot_candidate.all_card_candidate_containers_zombie[AllCards.zombie_card_ids[zombie_type]].card.is_choosed_pre_card:
-				card_slot_candidate.all_card_candidate_containers_zombie[AllCards.zombie_card_ids[zombie_type]].card._on_button_pressed()
+		var curr_card_type:ResourceCardReference.CardType = card_type_data.get("card_type", ResourceCardReference.CardType.Null) as ResourceCardReference.CardType
+		var content_id:int = int(card_type_data.get("content_id", 0))
+		var is_imitater_data:bool = bool(card_type_data.get("is_imitater", false))
+		match curr_card_type:
+			ResourceCardReference.CardType.Plant:
+				var plant_type:CharacterRegistry.PlantType = content_id as CharacterRegistry.PlantType
+				if not AllCards.plant_card_ids.has(plant_type):
+					continue
+				var plant_card_id:int = AllCards.plant_card_ids[plant_type]
+				## 如果是模仿者
+				if is_imitater_data:
+					## 未选择模仿者时
+					if not card_slot_candidate.card_imitater.is_be_choosed_imitater:
+						card_slot_candidate.all_card_candidate_containers_plant_imitater[plant_card_id].card._on_button_pressed()
+				else:
+					if not card_slot_candidate.all_card_candidate_containers_plant[plant_card_id].card.is_choosed_pre_card:
+						card_slot_candidate.all_card_candidate_containers_plant[plant_card_id].card._on_button_pressed()
+			ResourceCardReference.CardType.Zombie:
+				## 僵尸卡片隐藏时（ZOMBIE_CARD_ENABLED=false）跳过：待选卡槽里根本没有僵尸卡容器
+				if not ConstFeatureSwitch.ZOMBIE_CARD_ENABLED:
+					continue
+				var zombie_type:CharacterRegistry.ZombieType = content_id as CharacterRegistry.ZombieType
+				if not AllCards.zombie_card_ids.has(zombie_type):
+					continue
+				var zombie_card_id:int = AllCards.zombie_card_ids[zombie_type]
+				if not card_slot_candidate.all_card_candidate_containers_zombie[zombie_card_id].card.is_choosed_pre_card:
+					card_slot_candidate.all_card_candidate_containers_zombie[zombie_card_id].card._on_button_pressed()
+			ResourceCardReference.CardType.ZombieBoss:
+				## 僵王卡同样只在僵尸卡开启时出现
+				if not ConstFeatureSwitch.ZOMBIE_CARD_ENABLED:
+					continue
+				var boss_type:CharacterRegistry.ZombieBossType = content_id as CharacterRegistry.ZombieBossType
+				if not AllCards.boss_card_ids.has(boss_type):
+					continue
+				var boss_card_id:int = AllCards.boss_card_ids[boss_type]
+				if not card_slot_candidate.all_card_candidate_containers_boss.has(boss_card_id):
+					continue
+				if not card_slot_candidate.all_card_candidate_containers_boss[boss_card_id].card.is_choosed_pre_card:
+					card_slot_candidate.all_card_candidate_containers_boss[boss_card_id].card._on_button_pressed()
 
 
 
@@ -78,56 +101,57 @@ func _on_texture_button_pressed() -> void:
 func save_choosed_cards() -> void:
 	Global.global_game_state.selected_cards.clear()
 	for card:Card in card_slot_battle.curr_cards:
-		var card_type_data:={}
-		if card.card_plant_type != CharacterRegistry.PlantType.Null:
-			card_type_data["plant_type"] = card.card_plant_type
-			if card.is_imitater:
-				card_type_data["is_imitater"] = true
-		elif card.card_zombie_type != CharacterRegistry.ZombieType.Null:
-			card_type_data["zombie_type"] = card.card_zombie_type
-		else:
-			Log.warn("error:当前卡牌类型不为植物也不为僵尸")
-		Global.global_game_state.selected_cards.append(card_type_data)
+		## 身份统一写成 {card_type, content_id, is_imitater},僵王卡与普通卡走同一份编码
+		if card.card_reference == null or not card.card_reference.is_valid():
+			Log.warn("error:当前卡牌没有合法身份,已跳过保存")
+			continue
+		Global.global_game_state.selected_cards.append(card.card_reference.to_dict())
 
 	Global.save_service.save_selected_cards()
 
 ## 初始化系统预选卡
-## 从AllCards中复制一张新卡,隐藏card_slot_candidate的卡片
-func init_pre_choosed_card(card_type_list:Array[CharacterRegistry.PlantType], card_type_list_zombie:Array[CharacterRegistry.ZombieType]):
-	## 僵尸卡片隐藏时（ZOMBIE_CARD_ENABLED=false）整条僵尸预选失效：不读僵尸列表、僵尸分支跳过
-	var is_zombie_enable := ConstFeatureSwitch.ZOMBIE_CARD_ENABLED
-	for i in card_type_list.size():
-		## 植物/僵尸两个预选列表长度、以及卡槽占位数量都可能不一致，逐个判断避免越界
-		if is_zombie_enable and i >= card_type_list_zombie.size():
-			Log.warn("预选卡：僵尸预选列表比植物列表短，多余的植物预选已跳过")
-			break
+## 从 AllCards 复制一张新卡,隐藏 card_slot_candidate 里对应的待选卡
+## [param references] 植物 / 普通僵尸 / 僵王共用一份列表,逐个入槽
+func init_pre_choosed_card(references: Array[ResourceCardReference]):
+	for card_reference in references:
 		if len(card_slot_battle.cards_placeholder) <= len(card_slot_battle.curr_cards):
 			Log.warn("预选卡数量超过卡槽占位数，多余的系统预选卡已跳过")
 			break
-		var card:Card
-		var plant_type:CharacterRegistry.PlantType = card_type_list[i]
-		var zombie_type:CharacterRegistry.ZombieType = CharacterRegistry.ZombieType.Null
-		if is_zombie_enable and i < card_type_list_zombie.size():
-			zombie_type = card_type_list_zombie[i]
-		var character_type:CharacterRegistry.CharacterType = GlobalUtils.get_character_type(plant_type, zombie_type)
-		match character_type:
-			CharacterRegistry.CharacterType.Plant:
-				card_slot_candidate.all_card_candidate_containers_plant[AllCards.plant_card_ids[plant_type]].card.visible = false
-				card_slot_candidate.all_card_candidate_containers_plant[AllCards.plant_card_ids[plant_type]].card.is_choosed_pre_card = true
-				card = AllCards.all_plant_card_prefabs[plant_type].duplicate()
-			CharacterRegistry.CharacterType.Zombie:
-				if not is_zombie_enable:
-					continue
-				card_slot_candidate.all_card_candidate_containers_zombie[AllCards.zombie_card_ids[zombie_type]].card.visible = false
-				card_slot_candidate.all_card_candidate_containers_zombie[AllCards.zombie_card_ids[zombie_type]].card.is_choosed_pre_card = true
-				card = AllCards.all_zombie_card_prefabs[zombie_type].duplicate()
-			CharacterRegistry.CharacterType.Null:
-				continue
+		if card_reference == null or not card_reference.is_valid() or not AllCards.is_battle_card(card_reference):
+			Log.warn("预选卡：跳过未注册或不可出战的引用")
+			continue
+		## 僵尸卡片隐藏时（ZOMBIE_CARD_ENABLED=false）僵尸预选失效：待选区根本没有僵尸卡容器
+		if card_reference.card_type == ResourceCardReference.CardType.Zombie \
+			and not ConstFeatureSwitch.ZOMBIE_CARD_ENABLED:
+			continue
+		var candidate: CardCandidateContainer = _get_candidate_container(card_reference)
+		if candidate == null:
+			continue
+		candidate.card.visible = false
+		candidate.card.is_choosed_pre_card = true
+		var card: Card = AllCards.create_card(card_reference, Card.CardContext.Selection)
+		if card == null:
+			continue
 
 		card_slot_battle.curr_cards.append(card)
 		pre_choosed_card(card, card_slot_battle.cards_placeholder[len(card_slot_battle.curr_cards)-1])
 	## 预选卡断开鼠标点击信号
 	card_disconnect_click_in_choose()
+
+
+## 取某身份在待选区的容器;类别未开放或没有卡位时返回 null
+func _get_candidate_container(card_reference: ResourceCardReference) -> CardCandidateContainer:
+	match card_reference.card_type:
+		ResourceCardReference.CardType.Plant:
+			return card_slot_candidate.all_card_candidate_containers_plant.get(
+				AllCards.plant_card_ids[card_reference.content_id], null)
+		ResourceCardReference.CardType.Zombie:
+			return card_slot_candidate.all_card_candidate_containers_zombie.get(
+				AllCards.zombie_card_ids[card_reference.content_id], null)
+		ResourceCardReference.CardType.ZombieBoss:
+			return card_slot_candidate.all_card_candidate_containers_boss.get(
+				AllCards.boss_card_ids[card_reference.content_id], null)
+	return null
 
 ## 游戏选卡阶段时，卡片被点击
 func _on_card_click(card:Card):

@@ -520,19 +520,32 @@ func _detach_down_plant_container(plant: Plant000Base) -> void:
 #endregion
 
 #region 蹦极僵尸偷植物
-## 被蹦极僵尸偷植物,返回被偷的植物body复制体
-func be_bungi()->Node2D:
+## 返回当前可偷取的第一层植物；选择目标与实际偷取共用此顺序，失效或死亡实例不参与。
+## 僵王的蹦极技能也通过本接口筛选目标（见 z_b_001_doctor_skill_bungee.gd）
+func get_bungi_target() -> Plant000Base:
+	# 各种植层的偷取优先级；一次只取一株，不连带移除整格植物。
 	for place in [
 		CharacterRegistry.PlacePlantInCell.Norm,
 		CharacterRegistry.PlacePlantInCell.Shell,
 		CharacterRegistry.PlacePlantInCell.Down,
 		CharacterRegistry.PlacePlantInCell.Float
 	]:
-		var curr_plant := get_plant(place)
-		if is_instance_valid(curr_plant):
-			#curr_plant.be_bungi()
-			return curr_plant.be_bungi()
+		# 先以 Variant 检查可能已释放的引用，再转换植物类型。
+		var plant_reference: Variant = get_plant(place)
+		if not is_instance_valid(plant_reference):
+			continue
+		# 只有仍在场景中的存活植物才能成为偷取目标。
+		var plant := plant_reference as Plant000Base
+		if plant != null and plant.is_inside_tree() and not plant.is_queued_for_deletion() and not plant.is_death:
+			return plant
 	return null
+
+
+## 被蹦极僵尸偷植物,返回被偷的植物body复制体
+func be_bungi()->Node2D:
+	# 执行时重新读取格内植物，避免使用准备阶段已死亡的植物引用。
+	var plant: Plant000Base = get_bungi_target()
+	return plant.be_bungi() if plant != null else null
 #endregion
 
 #region 特殊状态

@@ -32,7 +32,7 @@ func _init() -> void:
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
 	## 原版本关传送带只给这 6 种：豌豆射手 / 坚果墙 / 冰蘑菇 / 荷叶 / 窝瓜 / 玉米投手
 	## 冰蘑菇和玉米投手是玩家唯一能主动让僵尸现形的两张牌，权重给低一点
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	1: 3,	## 豌豆射手
 	4: 3,	## 坚果墙
 	15: 1,	## 冰蘑菇：冰冻现形
@@ -70,10 +70,10 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸（展示僵尸走 IsShow 初始化，不隐形，玩家能看到本关有哪些僵尸）
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20, zombie_list)
+	await start_battle(20, zombie_list)

@@ -22,9 +22,6 @@ class_name HammerZombieManager
 墓碑只长第4列~第9列，如果都被占满则不长墓碑，只有停顿
 """
 @onready var hammer_zombie_timer: Timer = $HammerZombieTimer
-## 波次旗帜进度条：本节点是运行期 instantiate() 出来的，没有场景 owner、不能用 %FlagProgressBar，
-## 由 ZombieManager 在 init_source() 里转交（见 ZombieWaveSourceBase）
-var flag_progress_bar: FlagProgressBar
 
 ## 最多波数
 @export var max_wave = 10
@@ -40,6 +37,17 @@ var curr_group_min := -1		#当前小组数
 
 ## 每一小组的进度条占比（%）
 var progress_bar_segment_every_groud_min :float
+
+#region 战斗进度（关卡进度条的数据源每帧读一次，本管理器不碰进度条节点）
+## 当前战斗进度（0~100）：已出场的小组数 × 每小组占比
+var battle_progress := 0.0
+## 第一波是否已经开打（开打前进度条不显示）
+var is_wave_started := false
+## 本帧要升旗的旗帜下标（-1 = 不升），被读走后清掉
+var _flag_to_raise := -1
+## 本帧是否要把旗帜全部收起（多轮游戏切新一轮），被读走后清掉
+var _is_flag_reset_pending := false
+#endregion
 
 ## 当前可以生成的僵尸类型
 var curr_zombie_type_candidate :Array[CharacterRegistry.ZombieType] = [CharacterRegistry.ZombieType.Z001Norm]
@@ -72,16 +80,14 @@ func _ready() -> void:
 	if not hammer_zombie_timer.timeout.is_connected(_on_hammer_zombie_timer_timeout):
 		hammer_zombie_timer.timeout.connect(_on_hammer_zombie_timer_timeout)
 
-func init_source(game_para:ResourceLevelData, new_flag_progress_bar:FlagProgressBar) -> void:
-	flag_progress_bar = new_flag_progress_bar
+func init_source(game_para:ResourceLevelData) -> void:
 	zombie_multy = game_para.zombie_multy_hammer
 	max_wave = game_para.max_wave_hammer_zombie
 	curr_speed_zombie = game_para.speed_zombie_init
 	speed_zombie_add = game_para.speed_zombie_add
 	speed_zombie_max = game_para.speed_zombie_max
 
-	## 生成旗帜
-	flag_progress_bar.init_flag_from_wave(max_wave)
+	## 旗帜数量由进度条控制器按 get_flag_num() 自己建，本管理器只管算进度
 	progress_bar_segment_every_groud_min = 100.0 / (max_wave*10)
 
 ## 开第一波：本玩法的入场延迟固定 2 秒（不读关卡数据的 first_wave_delay）；
@@ -90,7 +96,7 @@ func init_source(game_para:ResourceLevelData, new_flag_progress_bar:FlagProgress
 func start_first_wave() -> void:
 	await get_tree().create_timer(FIRST_WAVE_DELAY).timeout
 	_on_hammer_zombie_timer_timeout()
-	flag_progress_bar.visible = true
+	is_wave_started = true
 
 ## 生成一小组僵尸
 func create_one_group_min_zombie():
@@ -130,10 +136,10 @@ func _idle_tombstone_list() -> Array[TombStone]:
 			idle_tombstones.append(tombstone)
 	return idle_tombstones
 
-## 计算当前进度并更新进度条
+## 计算当前进度（只算不写：进度条由控制器每帧来取，见 get_battle_progress）
 func set_progress_bar(curr_flag: int = -1) -> void:
-	var curr_progress :float = curr_all_group_min_num_sum * progress_bar_segment_every_groud_min
-	flag_progress_bar.set_progress(curr_progress, curr_flag)
+	battle_progress = curr_all_group_min_num_sum * progress_bar_segment_every_groud_min
+	_flag_to_raise = curr_flag
 
 func _on_hammer_zombie_timer_timeout() -> void:
 	## 如果上一小组为最后一小组
@@ -192,4 +198,31 @@ func _on_hammer_zombie_timer_timeout() -> void:
 		hammer_zombie_timer.wait_time = interval_every_group + randf_range(-0.1, 0.1)
 
 	hammer_zombie_timer.start()
+
+
+#region 战斗进度查询（关卡进度条的数据源从这里取，见 ZombieManager 的同名转发）
+## 当前战斗进度百分比（0~100）
+func get_battle_progress() -> float:
+	return clampf(battle_progress, 0.0, 100.0)
+
+## 本玩法的波次是否已经开打（开打前进度条不显示）
+func is_battle_started() -> bool:
+	return is_wave_started
+
+## 进度条上要画几面旗帜（每 10 波一面）
+func get_flag_num() -> int:
+	return max_wave / 10
+
+## 取走「本帧要升旗」的旗帜下标（-1 = 不升）
+func take_flag_raise_index() -> int:
+	var flag_i := _flag_to_raise
+	_flag_to_raise = -1
+	return flag_i
+
+## 取走「本帧要收起所有旗帜」的请求（本玩法是单轮，恒为 false）
+func take_flag_reset() -> bool:
+	var is_reset := _is_flag_reset_pending
+	_is_flag_reset_pending = false
+	return is_reset
+#endregion
 

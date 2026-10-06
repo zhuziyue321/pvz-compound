@@ -22,14 +22,13 @@ func run(a) -> void:
 		a.log("   bowling=%s bowling_col=%s seed_rain=%s mini_zombie=%s zombie_mode=%s" % [
 			str(para.is_bowling_stripe), str(para.plant_cell_col_j),
 			str(para.is_seed_rain), str(mini_zombie), str(para.is_zombie_mode)])
-		a.log("   day=%s daysun=%s mower=%s canhome=%s choose=%s show=%s fog=%s rain=%s preplant=%d" % [
+		a.log("   day=%s daysun=%s mower=%s canhome=%s choose=%s show=%s fog=%s rain=%s" % [
 			str(para.is_day), str(para.is_day_sun), str(para.is_lawn_mover), str(para.is_zombie_can_home),
-			str(para.can_choosed_card), str(para.look_show_zombie), str(para.is_fog), str(para.is_rain),
-			para.all_pre_plant_data.size()])
+			str(para.can_choosed_card), str(para.look_show_zombie), str(para.is_fog), str(para.is_rain)])
 		a.log("   refresh_types=%s bungi=%s" % [
 			str(para.zombie_refresh_types), str(para.is_bungi)])
 		a.log("   BGM=%s conveyor_cards=%s" % [
-			str(para.game_BGM), str(para.all_card_plant_type_probability.keys())])
+			str(para.game_BGM), str(para.conveyor_weights.map(func(w): return w.card_reference.content_id))])
 	a.log("[LVL] 结束")
 	a.quit_game()
 
@@ -43,14 +42,14 @@ func _find(dir_path: String) -> Array[String]:
 	var n := dir.get_next()
 	while n != "":
 		if dir.current_is_dir():
-			## script/ 放的是关卡脚本基类 / 事件脚本，不是关卡（同 LevelRegistry._scan_dir）
-			if n == "script":
+			## core/ 与 script/ 放的是关卡脚本基类 / 事件脚本，不是关卡（同 LevelRegistry._scan_dir）
+			if n == "core" or n == "script":
 				n = dir.get_next()
 				continue
 			out.append_array(_find(dir_path + "/" + n))
 		elif n.ends_with(".gd"):
 			## 关卡专属的场景脚本这类不是关卡的 .gd 跳过（判据同 LevelRegistry._scan_dir）
-			if not LevelRegistry.is_level_file_name(dir_path, n):
+			if not LevelRegistry.is_level_script(dir_path + "/" + n):
 				n = dir.get_next()
 				continue
 			out.append(dir_path + "/" + n)

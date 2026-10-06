@@ -26,7 +26,7 @@ func _init() -> void:
 
 
 func run_flow(mg: MainGameManager) -> void:
-	## 本关不出怪（monster_mode = Null），走不了 prefab.start_battle() 那条路，
+	## 本关不出怪（monster_mode = Null），走不了 start_battle() 那条路，
 	## 但**开战入口同时负责切主游戏 BGM**（开战一秒后播 game_BGM）—— 少了这一句，
 	## 整关都停在进关时的选卡曲「Choose Your Seeds」上，本关的 Loonboon 永远不会响。
 	## 与水族馆 / 观星同一套写法（见 minigame_08_zombie_aquarium.run_flow）：
@@ -34,7 +34,7 @@ func run_flow(mg: MainGameManager) -> void:
 	## 阶段切到 MAIN_GAME 也由它负责（不再手动赋值 main_game_progress）
 	await mg.main_game_start()
 
-	var slot_ui: SlotMachineUI = preload("res://src/levels/script/mini_game/slot_machine/slot_machine_ui.gd").new()
+	var slot_ui: SlotMachineUI = preload("res://src/levels/mode_minigame/minigame_03_slot_machine_ui.gd").new()
 	mg.canvas_layer_ui.add_child(slot_ui)
 	slot_ui.init(mg, start_sun, TARGET_SUN)
 	await slot_ui.game_finished

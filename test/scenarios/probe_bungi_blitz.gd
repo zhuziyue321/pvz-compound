@@ -64,7 +64,9 @@ func _check_level_para(a) -> void:
 		return
 	_check(a, "5-5 是传送带关", para.card_mode == ConstLevelData.E_CardMode.ConveyorBelt,
 		"card_mode=%d" % para.card_mode)
-	var pool: Array = para.all_card_plant_type_probability.keys()
+	var pool: Array = para.conveyor_weights.filter(
+		func(w): return w.card_reference.card_type == ResourceCardReference.CardType.Plant
+	).map(func(w): return w.card_reference.content_id)
 	pool.sort()
 	var expect: Array = EXPECT_POOL.duplicate()
 	expect.sort()

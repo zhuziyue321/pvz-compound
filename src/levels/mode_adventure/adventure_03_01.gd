@@ -5,7 +5,7 @@ extends LevelScriptBase
 ## 原 .tres 上的 timeline 事件数组已按原顺序平铺成 run_flow() 里的 await 序列。
 
 
-## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 prefab.dave_dialog
+## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 dave_dialog
 func _build_dave_dialog() -> CrazyDaveDialogResource:
 	var crazy_dave_dialog_detail_resource_0 := CrazyDaveDialogDetailResource.new()
 	## 原版冒险模式 3-1 开场（进入泳池场景）戴夫台词
@@ -112,20 +112,16 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 关卡戴夫对话
-	await prefab.dave_dialog(_build_dave_dialog())
+	await dave_dialog(_build_dave_dialog())
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(10, zombie_list)
+	await start_battle(10, zombie_list)
 
 
-## 本关有开场戴夫对话：对话在 run_flow() 里现场构造（见 _build_dave_dialog），
-## 这里只做声明 —— 有对话就不再播戴夫推销卡槽扩充（见 is_dave_sell_possible）
-func has_dave_dialog() -> bool:
-	return true

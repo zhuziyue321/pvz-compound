@@ -60,7 +60,7 @@ func _ready() -> void:
 	super()
 
 	if plant_type == 0:
-		push_error(name, "植物类型未赋值")
+		Log.error(name, "植物类型未赋值")
 
 ## 植物初始化属性
 enum E_PInitAttr{

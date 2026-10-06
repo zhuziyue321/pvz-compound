@@ -47,18 +47,8 @@ const DOOM_SHROOM_CRATER = preload("res://src/fx/doom_shroom_crater.tscn")
 var TOMBSTONE = load("res://src/items/tombstone.tscn")
 
 
-## 僵王博士本体（僵王关，由关卡流程的「生成僵王」事件放进场）
-## ⚠️ 只能写成 `var ... = load(...)`，**不能**写成 `const ... = preload(...)`：
-##   本工程的僵王场景（50 个 reanim 贴图 + 23 段动画）在 autoload 脚本的 preload 阶段会解析成
-##   一个**空 PackedScene**（`get_path()` 为空、instantiate() 返回 null，僵王根本进不了场），
-##   而同一个进程里 `load()` / `SceneRegistry.get("ZOMBIE_BOSS")` 拿到的却是完好的场景
-##   （2026-10-04 实测：preload 常量必现为空，改成 load() 后僵王关全程正常）。
-##   与下面 TOMBSTONE / TROPHY / SUN 的写法保持一致。
-var ZOMBIE_BOSS: PackedScene = load("res://src/entities/character/zombie/zombie_boss.tscn")
-## 僵王博士的冰球 / 火球
-const ZOMBOSS_BALL:PackedScene = preload("res://src/entities/character/zombie/zombie_boss_ball.tscn")
-## 僵王血条不在注册表里：它是僵王关专属 UI，归关卡侧
-## （res://src/levels/core/zomboss/zomboss_hp_bar.tscn，由 LevelTimelineEventSpawnZomboss 实例化）
+## 僵王博士不在本注册表里：僵王是正式角色，走 CharacterRegistry.ZombieBossType 查场景
+## （见 Global.character_registry.get_zombie_boss_info(..., BossScenes)），血条由 LevelInfo 统一管理。
 
 ## 舞王管理器
 var JACKSON_MANAGER = load("res://src/entities/character/components/jackson/jackson_manager.tscn")
@@ -83,7 +73,9 @@ const BUTTER_SPLAT = preload("res://src/fx/butter_splat.tscn")
 ## 阳光
 var SUN = load("res://src/items/sun.tscn")
 
-## 僵尸水族馆（迷你游戏第 8 关）：水族馆玩法总控 / 宠物潜水僵尸 / 喂僵尸的脑子
+## 僵尸水族馆（迷你游戏第 8 关）：入口场景（壳）→ 玩法总控 / 宠物潜水僵尸 / 喂僵尸的脑子
+## 关卡走 ZOMBIQUARIUM_SCENE（见 minigame_08_zombie_aquarium）；单独预览时直接在编辑器里跑它
+var ZOMBIQUARIUM_SCENE = load("res://src/zombiquarium/zombiquarium.tscn")
 var ZOMBIQUARIUM = load("res://src/zombiquarium/zombiquarium_manager.tscn")
 var ZOMBIQUARIUM_PET = load("res://src/zombiquarium/zombiquarium_pet.tscn")
 var ZOMBIQUARIUM_BRAIN = load("res://src/zombiquarium/zombiquarium_brain.tscn")

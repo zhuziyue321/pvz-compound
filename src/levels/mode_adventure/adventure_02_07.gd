@@ -23,13 +23,15 @@ func run_flow(_mg: MainGameManager) -> void:
 		CharacterRegistry.ZombieType.Z008Football,
 	]
 
+	## 戴夫推销卡槽扩充（2-2 ~ 3-4 这几关都有；钱不够时戴夫不来，见 LevelScriptBase.dave_sell_card_slot）
+	await dave_sell_card_slot()
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20, zombie_list)
+	await start_battle(20, zombie_list)

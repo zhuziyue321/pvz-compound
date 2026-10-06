@@ -83,9 +83,8 @@ var is_attack_ladder_plant:=true
 ## 检测到的敌人
 ## (不能攻击是因为敌人状态不在攻击状态中，连接状态变化信号)
 ## 检测到的可以被攻击的一个敌人,给特殊植物\僵尸\抛物线子弹使用
+## 僵王也是正式角色（ZB000Base 继承 Character000Base），复用同一个字段
 var enemy_can_be_attacked :Character000Base = null
-## 僵王博士（不是 Character000Base：只有低头期间可被攻击，见 ZombossBoss.is_head_vulnerable）
-var zomboss_can_be_attacked: ZombossBoss = null
 ## 是否需要判断检测敌人
 var need_judge := false
 
@@ -103,14 +102,15 @@ signal signal_can_attack
 signal signal_not_can_attack
 
 func _ready() -> void:
+	## 必须调 super：ComponentNormBase._ready() 负责「场景里配了 is_enable_default = false 就禁用组件」，
+	## 不调的话这条会丢，配了默认禁用的检测组件一进关就开始检测敌人
+	super._ready()
 	_ensure_can_attack_status_component()
 	## 魅惑不再切换碰撞层，周围已经重叠着的检测组件收不到 area_entered，
 	## 靠这条广播让全场重新判定一次敌我（见 _on_character_be_hypno）
 	EventBus.subscribe("character_be_hypno", _on_character_be_hypno)
 	if owner is Plant000Base:
 		update_curr_collision_lay(1)
-		## 僵王低头 / 抬头时植物要重新判定目标（僵王不是 Character000Base，不会走状态变化信号）
-		EventBus.subscribe("zomboss_head_vulnerable", _on_zomboss_head_vulnerable)
 	elif owner is Zombie000Base:
 		update_curr_collision_lay(2)
 	elif owner is MainGameManager:
@@ -134,12 +134,11 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	EventBus.unsubscribe("zomboss_head_vulnerable", _on_zomboss_head_vulnerable)
 	EventBus.unsubscribe("character_be_hypno", _on_character_be_hypno)
 
 
-## 僵王低头 / 抬头：下一帧重新判定目标
-func _on_zomboss_head_vulnerable(_is_vulnerable = null) -> void:
+## 僵王状态变化（受击窗口开关）只标记重查；受击框启停产生的进入/退出事件还会再刷新一次
+func _on_enemy_boss_status_update() -> void:
 	need_judge = true
 
 
@@ -174,7 +173,6 @@ func enable_component(is_enable_factor:E_IsEnableFactor):
 func disable_component(is_enable_factor:E_IsEnableFactor):
 	super(is_enable_factor)
 	enemy_can_be_attacked = null
-	zomboss_can_be_attacked = null
 	signal_not_can_attack.emit()
 	need_judge = false
 
@@ -182,13 +180,13 @@ func disable_component(is_enable_factor:E_IsEnableFactor):
 ## 敌人进入当前区域，若为同一行，当前帧进行判断是否可以攻击
 func _on_area_2d_area_entered(area: Area2D) -> void:
 	var enemy = area.owner
-	## 僵王不是角色基类，没有 lane / 状态信号，只置重判标记
-	if enemy is ZombossBoss:
-		need_judge = true
+	## 僵王跨行由检测框覆盖范围决定，普通角色仍保留同行限制。
+	if not enemy is ZB000Base and is_lane and owner.lane != enemy.lane:
 		return
-	if is_lane and owner.lane != enemy.lane:
-		return
-	if enemy is Plant000Base:
+	if enemy is ZB000Base:
+		if not enemy.signal_status_update.is_connected(_on_enemy_boss_status_update):
+			enemy.signal_status_update.connect(_on_enemy_boss_status_update)
+	elif enemy is Plant000Base:
 		if not enemy.signal_ladder_update.is_connected(_on_enemy_plant_ladder_update.bind(enemy)):
 			enemy.signal_ladder_update.connect(_on_enemy_plant_ladder_update.bind(enemy))
 	elif enemy is Zombie000Base:
@@ -223,12 +221,11 @@ func _on_enemy_zombie_lane_update(zombie:Zombie000Base):
 ## 如果检测到可以被攻击的敌人\道具，发射信号,保存当前敌人，return,若到最后没有检测到敌人，发射信号，重置当前敌人，return
 func judge_is_have_enemy():
 	#Log.debug("判定敌人")
-	zomboss_can_be_attacked = null
-	## 先找场上普通敌人，再考虑低头的僵王
+	## 僵王是正式角色，与普通僵尸走同一条判定链（跨行由检测框几何决定）
 	for ray_area in all_ray_area:
 		var all_enemy_area = ray_area.get_overlapping_areas()
 		for enemy_area in all_enemy_area:
-			## 先检测角色（僵王不是 Character000Base，留给后面单独判定）
+			## 先检测角色
 			if enemy_area.owner is Character000Base:
 				if _on_detect_character(enemy_area.owner):
 					signal_can_attack.emit()
@@ -239,60 +236,10 @@ func judge_is_have_enemy():
 					signal_can_attack.emit()
 					return true
 
-	## 检测射线里有没有低头的僵王
-	for ray_area in all_ray_area:
-		var all_enemy_area = ray_area.get_overlapping_areas()
-		for enemy_area in all_enemy_area:
-			if enemy_area.owner is ZombossBoss:
-				var boss: ZombossBoss = enemy_area.owner
-				if _judge_zomboss_can_be_attacked(boss):
-					zomboss_can_be_attacked = boss
-					enemy_can_be_attacked = null
-					signal_can_attack.emit()
-					return true
-
-	## 射线没盖到僵王时，按「它在场地右侧、且已低头」直接锁定（僵王站在场外，射线常常够不到）
-	var boss_by_range := _try_zomboss_by_range()
-	if boss_by_range != null:
-		zomboss_can_be_attacked = boss_by_range
-		enemy_can_be_attacked = null
-		signal_can_attack.emit()
-		return true
-
 	## 如果循环结束还未return,未找到敌人
 	enemy_can_be_attacked = null
-	zomboss_can_be_attacked = null
 	signal_not_can_attack.emit()
 	return false
-
-
-## 僵王当前能不能被打：只有它低下头（is_head_vulnerable）的窗口里才行
-func _judge_zomboss_can_be_attacked(boss: ZombossBoss) -> bool:
-	if not is_instance_valid(boss) or boss.is_dead or not boss.is_head_vulnerable:
-		return false
-	if not owner is Plant000Base:
-		return false
-	return true
-
-
-## 按位置直接锁定僵王（要求它在植物的右侧）
-## 能不能这样被锁定由僵王自己声明（ZombossBoss.is_range_detectable）—— 本组件不认任何关卡开关，
-## 哪关的僵王该不该被自动打到是那一关自己的事
-func _try_zomboss_by_range() -> ZombossBoss:
-	if not owner is Plant000Base:
-		return null
-	var main_game = Global.main_game
-	if main_game == null:
-		return null
-	var boss: ZombossBoss = main_game.zomboss_boss
-	if not _judge_zomboss_can_be_attacked(boss):
-		return null
-	if not boss.is_range_detectable:
-		return null
-	var aim_x := boss.hurt_box_component.global_position.x
-	if aim_x <= owner.global_position.x:
-		return null
-	return boss
 
 ## 当检测到道具
 func _on_detect_main_game_item(curr_main_game_item:MainGameItemBase)->bool:
@@ -316,7 +263,7 @@ func _on_detect_character(enemy:Character000Base) -> bool:
 	if _judge_enemy_is_can_be_attack(enemy):
 		if enemy is Plant000Base:
 			enemy_can_be_attacked = get_first_be_hit_plant_in_cell(enemy)
-		elif enemy is Zombie000Base:
+		elif enemy is Zombie000Base or enemy is ZB000Base:
 			enemy_can_be_attacked = enemy
 		## 该格子可能没有可攻击的植物，此时直接返回，避免对 null 连接信号
 		if enemy_can_be_attacked == null:
@@ -343,8 +290,14 @@ func get_first_be_hit_plant_in_cell(plant:Plant000Base)->Plant000Base:
 
 ## 判断敌人状态是否可以被攻击
 func _judge_enemy_is_can_be_attack(enemy:Character000Base)->bool:
-	if not is_instance_valid(enemy):
+	if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.is_death:
 		return false
+	## 僵王：状态机直接控制受击组件，不检查同行，也不需要僵王专属的检测开关。
+	## 跨行能否打到完全由检测框的几何覆盖范围决定（见僵王说明文档「受击资格与植物交互」）。
+	if enemy is ZB000Base:
+		return enemy.character_init_type == Character000Base.E_CharacterInitType.IsNorm \
+			and is_instance_valid(enemy.hurt_box_component) and enemy.hurt_box_component.is_enabling \
+			and (can_attack_status_component.can_attack_zombie_status & Zombie000Base.E_BeAttackStatusZombie.IsNorm) != 0
 	## 先判断行属性
 	if is_lane and owner.lane != enemy.lane:
 		return false
@@ -384,22 +337,13 @@ func _judge_enemy_is_can_be_attack(enemy:Character000Base)->bool:
 
 #region 检测组件提供的通用方法
 ## 更新可攻击敌人为第一个敌人(最前面的敌人),投手类使用
-## 没有普通敌人时才瞄准低头的僵王（原版：僵王在场上时投手优先打普通僵尸）
+## 僵王是正式角色，与普通僵尸一起参与「最靠前」比较，不再单独兜底
 func update_first_enemy()->Character000Base:
 	enemy_can_be_attacked = null
-	zomboss_can_be_attacked = null
-	var best_zomboss: ZombossBoss = null
 	for ray_area in all_ray_area:
 		var all_enemy_area = ray_area.get_overlapping_areas()
 		for enemy_area in all_enemy_area:
 			var enemy = enemy_area.owner
-			## 僵王不是角色基类，先攒起来，最后再看
-			if enemy is ZombossBoss:
-				var boss: ZombossBoss = enemy
-				if _judge_zomboss_can_be_attacked(boss):
-					if best_zomboss == null or best_zomboss.hurt_box_component.global_position.x > boss.hurt_box_component.global_position.x:
-						best_zomboss = boss
-				continue
 			if not enemy is Character000Base:
 				continue
 			## 如果敌人可以被攻击
@@ -409,11 +353,6 @@ func update_first_enemy()->Character000Base:
 						enemy_can_be_attacked = enemy
 				else:
 					enemy_can_be_attacked = enemy
-	## 无普通敌人时才瞄准低头僵王
-	if enemy_can_be_attacked == null:
-		if best_zomboss == null:
-			best_zomboss = _try_zomboss_by_range()
-		zomboss_can_be_attacked = best_zomboss
 	return enemy_can_be_attacked
 
 

@@ -19,9 +19,7 @@ signal signal_wave_refresh(is_end_wave: bool)
 
 ## 初始化出怪器（由 `ZombieManager.init_manager()` 在 monster_mode 指定的分支里调用）
 ## [game_para] 关卡数据
-## [flag_progress_bar] 波次旗帜进度条 —— 出怪器是运行期 `instantiate()` 出来的节点，
-##                     没有场景 owner、取不到 `%FlagProgressBar`，所以由 ZombieManager 转交
-func init_source(_game_para: ResourceLevelData, _flag_progress_bar: FlagProgressBar) -> void:
+func init_source(_game_para: ResourceLevelData) -> void:
 	pass
 
 
@@ -29,3 +27,30 @@ func init_source(_game_para: ResourceLevelData, _flag_progress_bar: FlagProgress
 ## 开局要不要先等几秒由出怪器自己决定
 func start_first_wave() -> void:
 	pass
+
+
+#region 战斗进度（关卡进度条的数据源从这里取；出怪器不碰进度条节点本身）
+## 当前战斗进度百分比（0~100）：出怪器自己算，默认 0（没有进度概念）
+func get_battle_progress() -> float:
+	return 0.0
+
+
+## 本玩法的波次是否已经开打（开打前进度条不显示）
+func is_battle_started() -> bool:
+	return false
+
+
+## 进度条上要画几面旗帜（<= 0 = 不画）
+func get_flag_num() -> int:
+	return 0
+
+
+## 取走「本帧要升旗」的旗帜下标（-1 = 不升）
+func take_flag_raise_index() -> int:
+	return -1
+
+
+## 取走「本帧要收起所有旗帜」的请求
+func take_flag_reset() -> bool:
+	return false
+#endregion

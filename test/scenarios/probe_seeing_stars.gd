@@ -3,10 +3,11 @@ extends RefCounted
 ## 覆盖：
 ##   ① 关卡数据：4 面旗帜（40 波）/ 杨桃是预选卡（没解锁也进卡槽）
 ##   ② 星星轮廓：13 个轮廓点、绘制层节点已挂上
-##   ③ 种植限制：轮廓点上只能种杨桃 / 南瓜头（豌豆射手种不进去）；
+##   ③ 进度条口径：观星数据源（进度 = 已种轮廓点 / 总数）、不画旗帜、开战才显示
+##   ④ 种植限制：轮廓点上只能种杨桃 / 南瓜头（豌豆射手种不进去）；
 ##      轮廓点之外不能种杨桃（豌豆射手照常能种）
-##   ④ 通关判定：轮廓点全种满杨桃 → 出奖杯（不是靠打完波次）
-##   ⑤ 规则全在关卡脚本上：star_cells / is_all_star_cells_planted() 都从脚本取
+##   ⑤ 通关判定：轮廓点全种满杨桃 → 出奖杯（不是靠打完波次）
+##   ⑥ 规则全在关卡脚本上：star_cells / is_all_star_cells_planted() 都从脚本取
 ## 机器可读汇总：最后一行 [SEESTARS] result=PASS|FAIL failed=<n>
 
 const LEVEL := "res://src/levels/mode_minigame/minigame_07_seeing_stars.gd"
@@ -77,6 +78,20 @@ func run(a) -> void:
 		ghost_num == STAR_CELL_NUM and ghost_num == star_cells.size(), str(ghost_num))
 	_check(a, "每个虚影都挂进树且半透明", visible_ghost_num == STAR_CELL_NUM, str(visible_ghost_num))
 
+	# ------------------------------------------------ STEP2.5 进度条口径
+	a.log("STEP2.5 进度条口径（进度 = 已种轮廓点 / 轮廓点总数）")
+	var provider: LevelProgressProvider = mg.level_progress_controller.provider
+	_check(a, "数据源是观星口径", provider is SeeingStarsProgressProvider, str(provider))
+	if provider == null:
+		_finish(a)
+		return
+	## 进度条被种植进度占满，波次（4 面旗帜的倒计时）不画在上面
+	_check(a, "进度条不画旗帜", provider.get_flag_num() == 0, str(provider.get_flag_num()))
+	_check(a, "不升旗", provider.take_flag_raise_index() == -1, str(provider.take_flag_raise_index()))
+	_check(a, "开局进度 0%（一个轮廓点都还没种）", is_zero_approx(provider.get_progress()),
+		str(provider.get_progress()))
+	_check(a, "开战前进度条不显示", not provider.is_bar_visible())
+
 	# ------------------------------------------------ STEP3 种植限制
 	a.log("STEP3 种植限制")
 	var star_cell: PlantCell = star_cells[0]
@@ -112,8 +127,21 @@ func run(a) -> void:
 	var wave_manager = mg.zombie_manager.zombie_wave_manager
 	_check(a, "开战了但还没到最后一波（通关不看波次）", wave_manager.curr_wave < mg.game_para.max_wave - 1,
 		str(wave_manager.curr_wave))
+	## 进度条沿用战斗口径的显示时机：开第一波之后才显示（进 MAIN_GAME 那一刻还没开波）
+	var waited_bar := 0.0
+	while waited_bar < 40.0 and not provider.is_bar_visible():
+		await a.wait(0.5)
+		waited_bar += 0.5
+	_check(a, "开打后进度条显示", provider.is_bar_visible(), str(waited_bar) + " 秒仍未开第一波")
+	## 先种一个看进度条是不是跟着涨（口径 = 已种轮廓点 / 总数）
+	star_cells[0].create_plant(CharacterRegistry.PlantType.P030StarFruit)
+	var one_progress := 100.0 / float(STAR_CELL_NUM)
+	_check(a, "种 1 个轮廓点 → 进度 = 1/" + str(STAR_CELL_NUM),
+		absf(provider.get_progress() - one_progress) < 0.01, str(provider.get_progress()))
 	for plant_cell: PlantCell in star_cells:
 		plant_cell.create_plant(CharacterRegistry.PlantType.P030StarFruit)
+	_check(a, "全种上 → 进度 100%", is_equal_approx(provider.get_progress(), 100.0),
+		str(provider.get_progress()))
 	await a.wait(3.0)
 	_check(a, "种满后轮廓判定为真", level_script.is_all_star_cells_planted())
 	_check(a, "种满后进入 GAME_OVER（掉奖杯结算）",

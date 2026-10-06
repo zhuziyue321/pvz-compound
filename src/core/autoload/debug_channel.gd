@@ -86,7 +86,7 @@ func _ready() -> void:
 func _spawn_autopilot() -> void:
 	var script: GDScript = load("res://test/autopilot.gd")
 	if script == null:
-		push_error("[调试通道] 注入失败：autopilot.gd 加载不了")
+		Log.error("[调试通道] 注入失败：autopilot.gd 加载不了")
 		return
 	var ap: Node = script.new()
 	ap.name = "InjectedAutopilot"
@@ -270,7 +270,9 @@ func _collect_registries() -> void:
 	else:
 		_report.line("子弹注册表: 取不到（成员名可能已变）")
 	if AllCards != null:
-		_report.line("AllCards: 植物卡=%d 僵尸卡=%d" % [AllCards.all_plant_card_prefabs.size(), AllCards.all_zombie_card_prefabs.size()])
+		_report.line("AllCards: 植物卡=%d 僵尸卡=%d 僵王卡=%d" % [
+			AllCards.all_plant_card_prefabs.size(), AllCards.all_zombie_card_prefabs.size(),
+			AllCards.all_boss_card_prefabs.size()])
 	_collect_scene_registry()
 
 

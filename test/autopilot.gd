@@ -288,6 +288,19 @@ func click_plant_cell(row: int, col: int) -> bool:
 	return ok
 
 
+## 按住 (x1,y1) 拖到 (x2,y2) 再松手（合成真实事件，见 AutopilotInput.drag）
+func drag(x1: float, y1: float, x2: float, y2: float) -> void:
+	await _input.drag(x1, y1, x2, y2)
+	_flush()
+
+
+## 从草坪格子 (row1,col1) 拖到 (row2,col2)：拖动类玩法（僵尸迷阵交换相邻两株）用这个
+func drag_plant_cell(row1: int, col1: int, row2: int, col2: int) -> bool:
+	var ok := await _input.drag_plant_cell(row1, col1, row2, col2)
+	_flush()
+	return ok
+
+
 func key(action: String) -> void:
 	await _input.key(action)
 	_flush()

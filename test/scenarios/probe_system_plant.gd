@@ -42,16 +42,16 @@ func run(a) -> void:
 	a.log("  场地 %d 行 x %d 列" % [pcm.all_plant_cells.size(), pcm.all_plant_cells[0].size()])
 
 	# ------------------------------------------------ STEP3 配一次事件并跑
-	var single := PrePlantResource.new()
+	var single := SystemPlantResource.new()
 	single.plant_type = CharacterRegistry.PlantType.P002SunFlower
 	single.plant_cell_pos = Vector2i(1, 1)			## 第 1 行第 1 列
-	var whole_row := PrePlantResource.new()
+	var whole_row := SystemPlantResource.new()
 	whole_row.plant_type = CharacterRegistry.PlantType.P004WallNut
 	whole_row.plant_cell_pos = Vector2i(2, 0)		## 第 2 行整行
-	var out_of_range := PrePlantResource.new()		## 越界：应当被跳过
+	var out_of_range := SystemPlantResource.new()	## 越界：应当被跳过
 	out_of_range.plant_type = CharacterRegistry.PlantType.P001PeaShooterSingle
 	out_of_range.plant_cell_pos = Vector2i(99, 99)
-	var plants: Array[PrePlantResource] = [single, whole_row, out_of_range]
+	var plants: Array[SystemPlantResource] = [single, whole_row, out_of_range]
 	event.plants = plants
 	await event.run(mg)
 

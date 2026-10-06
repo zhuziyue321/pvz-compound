@@ -138,9 +138,10 @@ func _check_level_para(a) -> void:
 			para.max_choosed_card_num == EXPECT_CARD_NUM_EXCEPT_BASE.get(small, 0),
 			str(para.max_choosed_card_num))
 		var expect_pre_card: Array = EXPECT_FIXED_CARD.get(small, [])
+		var prechosen_ids: Array = para.prechosen_cards.map(func(r): return r.content_id)
 		_check(a, label + " 关卡资源预选卡 = %s" % str(expect_pre_card),
-			_is_same_int_array(para.pre_choosed_card_list_plant, expect_pre_card),
-			str(para.pre_choosed_card_list_plant))
+			_is_same_int_array(prechosen_ids, expect_pre_card),
+			str(prechosen_ids))
 		var is_wave_ok := not para.zombie_refresh_types.is_empty()
 		for zombie_type: CharacterRegistry.ZombieType in para.zombie_refresh_types:
 			## 旗帜僵尸由大波逻辑单独塞入，名单里不该出现；名单外的僵尸会被静默过滤
@@ -269,8 +270,8 @@ func _check_conveyor_and_final_level(a) -> void:
 		_check(a, label + ("" if want_conveyor else " 不是") + "传送带关", is_conveyor == want_conveyor,
 			"card_mode=" + str(para.card_mode))
 		if want_conveyor:
-			_check(a, label + " 传送带卡池非空", not para.all_card_plant_type_probability.is_empty(),
-				str(para.all_card_plant_type_probability.size()))
+			_check(a, label + " 传送带卡池非空", not para.conveyor_weights.is_empty(),
+				str(para.conveyor_weights.size()))
 		var want_hammer: bool = small == 5
 		_check(a, label + ("" if want_hammer else " 不是") + "锤僵尸出怪模式",
 			(para.monster_mode == ConstLevelData.E_MonsterMode.HammerZombie) == want_hammer,

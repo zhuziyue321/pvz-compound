@@ -11,7 +11,7 @@ class_name LevelTimelineEventStartBattle
 ##               （砸罐子这类要等玩家自己砸完的关卡就该一直等）
 ##   max_wave —— 本段波数，> 0 时改写关卡数据上的 max_wave；-1 = 沿用关卡数据
 ##   zombie_refresh_types —— 本段出怪表，非空时改写关卡数据上的出怪表；空 = 沿用关卡数据
-##               （关卡脚本里 `await prefab.start_battle(10, [1])` 就把这两条一并带过来）
+##               （关卡脚本里 `await start_battle(10, [1])` 就把这两条一并带过来）
 
 @export var timeout: float = 0.0
 @export var max_wave: int = -1

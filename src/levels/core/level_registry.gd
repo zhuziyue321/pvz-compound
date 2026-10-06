@@ -12,8 +12,14 @@ class_name LevelRegistry
 ##   有没有被某个场景引用，业务代码拿不到「一共有哪几关」，只能去遍历场景节点。
 ##   注册表把这件事收成一处，业务代码不再散落 `res://` 关卡路径（硬约束 §1-4）。
 ##
-## 内置关卡**扫目录自动登记**（约定 > 配置，不维护一张 95 行的大表，加一个 .tres 就自动进表）；
+## 内置关卡**扫目录自动登记**（约定 > 配置，不维护一张 95 行的大表，加一个脚本就自动进表）；
 ## 玩家自制关卡走 register_custom() 动态登记。
+##
+## ⚠️ **「是不是关卡」只认继承链**（白名单，见 LEVEL_BASE_CLASS_NAMES / is_level_script）：
+## 模式目录里除了关卡脚本，还混着「只服务某一关的场景脚本 / UI / 进度条数据源」
+## （如 mode_minigame/minigame_07_seeing_stars_cell_star_overlay.gd、mode_adventure/adventure_05_05_bungi_blitz.gd），
+## 它们按硬约束 §1-8 必须与关卡脚本同目录 —— **不能靠文件名前缀区分**（前缀只是命名约定，
+## 辅助脚本按约定也带关卡名前缀，照样会被误登记成假关卡）。
 ##
 ## ⚠️ 关卡资源是**有状态**的：init_para() / set_choose_level() 会在运行时改它的字段。
 ## get_level() 对**脚本关卡**是 new() 出一个实例（关卡数据有状态：init_para() 会改字段，
@@ -30,13 +36,17 @@ const MODE_BY_DIR: Dictionary = {
 	"mode_survival": MainSceneRegistry.MainScenes.ChooseLevelSurvival,
 }
 
+## 关卡识别白名单：**只在继承链上认这两个 class_name**（`LevelScriptBase` 本身也 extends `ResourceLevelData`）
+## 其余一切 .gd（Node2D 的场景脚本、进度条数据源、UI…）**文件名长得再像关卡也不是关卡**
+const LEVEL_BASE_CLASS_NAMES: Array[String] = ["LevelScriptBase", "ResourceLevelData"]
+
 static var _path_by_id: Dictionary = {}
 static var _mode_by_id: Dictionary = {}
 static var _is_scanned := false
 
 
 #region 扫描与登记
-## 重新扫描内置关卡目录（加了 / 删了 .tres 之后调用）
+## 重新扫描内置关卡目录（加了 / 删了关卡脚本之后调用）
 static func rescan() -> void:
 	_path_by_id.clear()
 	_mode_by_id.clear()
@@ -62,10 +72,9 @@ static func _scan_dir(dir_path: String, mode: MainSceneRegistry.MainScenes) -> v
 				continue
 			_scan_dir(dir_path.path_join(name), child_mode)
 		elif name.ends_with(".gd"):
-			## 模式目录里除了关卡脚本，还可能混着「关卡专属的场景脚本」
-			## （如 mode_minigame/cell_star_overlay.gd，只服务一关、按硬约束 §1-8 放在关卡侧）：
-			## 这类文件不是关卡，别登记，免得选关列表里冒出一个假关卡
-			if not is_level_file_name(dir_path, name):
+			## 白名单判据：继承链上出现 LevelScriptBase / ResourceLevelData 才是关卡。
+			## 关卡专属的场景脚本 / UI / 进度条数据源一律不登记，免得选关列表里冒出假关卡
+			if not is_level_script(dir_path.path_join(name)):
 				name = dir.get_next()
 				continue
 			var id := name.get_basename()
@@ -77,14 +86,23 @@ static func _scan_dir(dir_path: String, mode: MainSceneRegistry.MainScenes) -> v
 	dir.list_dir_end()
 
 
-## [dir_path] 所在的目录  [file_name] 文件名（含扩展名）
-## 目录名即模式（mode_minigame → minigame_），关卡脚本的文件名**以同一前缀开头**；
-## 不是模式目录（core/ 这类）时不作要求 —— 那里的 .gd 本来就是关卡系统的工具脚本
-static func is_level_file_name(dir_path: String, file_name: String) -> bool:
-	var dir_name := dir_path.get_file()
-	if not dir_name.begins_with("mode_"):
-		return true
-	return file_name.begins_with(dir_name.substr("mode_".length()) + "_")
+## [res_path] 待判定的 .gd 的 res:// 绝对路径
+##
+## 白名单判据：沿 `get_base_script()` 往上走，继承链上出现 LEVEL_BASE_CLASS_NAMES 里的
+## class_name 才算关卡；走到底都没命中就不是（load 失败 / 不是脚本同样返回 false）。
+##
+## ⚠️ 别用 `get_instance_base_type()` 判：它返回的是**原生**基类（关卡脚本一律是 "Resource"），
+## 分不出 LevelScriptBase 与别的 Resource 子类 —— 要认的是脚本链上的 class_name。
+static func is_level_script(res_path: String) -> bool:
+	var res := load(res_path)
+	if not (res is Script):
+		return false
+	var s := (res as Script).get_base_script()
+	while s != null:
+		if LEVEL_BASE_CLASS_NAMES.has(s.get_global_name()):
+			return true
+		s = s.get_base_script()
+	return false
 
 
 ## 登记一个玩家自制关卡（id 由调用方给，通常是文件名 basename）

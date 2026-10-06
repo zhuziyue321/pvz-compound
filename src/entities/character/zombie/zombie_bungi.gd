@@ -1,6 +1,10 @@
 extends Zombie000Base
 class_name Zombie021Bungi
 
+## 成功偷取或确定放弃目标时只发出一次，不等待上升离场；死亡由角色死亡信号通知。
+## 召唤方（如博士的蹦极技能）靠它判断本批是否结束，改名 / 删除必须同步改调用方。
+signal signal_steal_finished()
+
 ## 偷盗的植物的容器节点
 @onready var bungi_container: Node2D = $Body/BodyCorrect/BungiContainer
 
@@ -18,6 +22,8 @@ class_name Zombie021Bungi
 @export var is_umbrella_raise := false
 ## 蹦极僵尸所在PlantCell
 var plant_cell:PlantCell
+## 本次偷取是否已经通知过召唤方；信号绝不重复发送。
+var _steal_finished := false
 
 @export_group("降落节奏")
 ## 进场后隔多久开始降落（普通蹦极是等靶子先落地，空投没有靶子，这段就是纯前摇）
@@ -73,6 +79,8 @@ func raise_start():
 	bungee_target.visible = false
 	## 禁用受击组件
 	hurt_box_component.disable_component(ComponentNormBase.E_IsEnableFactor.Character)
+	## 偷取（或放弃偷取）已经确定，先通知召唤方，不等待这一秒上升结束
+	_finish_steal()
 	var tween = create_tween()
 	tween.tween_property(body_correct, "position:y", body_correct.position.y-600, 1.0)
 	tween.set_parallel()
@@ -106,6 +114,16 @@ func character_death():
 	super()
 	queue_free()
 
+## 标记本次偷取已结束；空手和被保护伞弹开同样属于结束，信号绝不重复发送。
+func _finish_steal() -> void:
+	if _steal_finished:
+		return
+	_steal_finished = true
+	signal_steal_finished.emit()
+
+
 ## 被保护伞摊开
 func be_umbrella_leaf():
 	is_umbrella_raise = true
+	## 本次偷取作废，召唤方不必再等这一只
+	_finish_steal()

@@ -13,6 +13,8 @@ extends LevelScriptBase
 ##   · `CellStarOverlay` —— 给一批格子各摆一棵半透明不动的植物虚影的绘制层
 ##     （用哪种植物的哪一帧、什么算达标由本文件传进去）
 ##   · `LevelScriptBase.init_level_items()` —— 进关打限制的时机：格子已建好、玩家还动手不了
+##   · `LevelScriptBase.create_progress_provider()` —— 右下角进度条换成观星口径
+##     （进度 = 已种上杨桃的轮廓点数 / 轮廓点总数、不画旗帜，见 `SeeingStarsProgressProvider`）
 ##
 ## 原版规则（来源：PVZ Wiki https://plantsvszombies.wiki.gg/wiki/Seeing_Stars）：
 ##   1. 草坪上有一片星星形状的轮廓点，**轮廓点上只能种杨桃和南瓜头**（及它们的模仿者）；
@@ -25,7 +27,7 @@ extends LevelScriptBase
 
 ## 绘制层：给轮廓点各摆一棵半透明不动的杨桃虚影（通用组件，不含任何玩法规则）
 ## 只被本关用，所以跟本关脚本放在同一个目录（关卡侧），不进 src/items/
-const CELL_STAR_OVERLAY = preload("res://src/levels/mode_minigame/cell_star_overlay.tscn")
+const CELL_STAR_OVERLAY = preload("res://src/levels/mode_minigame/minigame_07_seeing_stars_cell_star_overlay.tscn")
 ## 虚影定格在杨桃 idle 动画的第 0 帧（动画名见 plant_star_fruit.tscn 的 AnimationLibrary）
 const STAR_FRUIT_IDLE_ANIM := &"StarFruit_idle"
 
@@ -77,7 +79,7 @@ func _init() -> void:
 	## 场景曲：本关是白天前院 → 白天曲 Grasswalk
 	game_BGM = ConstLevelData.GameBGM.FrontDay
 	zombie_multy = 2
-	## 4 面旗帜 = 40 波（旗帜进度条要求 max_wave 是 10 的倍数，见 FlagProgressBar.init_flag_from_wave）
+	## 4 面旗帜 = 40 波（进度条上的旗帜数 = max_wave / 10，见 ZombieWaveManager.get_flag_num）
 	max_wave = MAX_FLAG * WAVE_EVERY_FLAG
 	## 出怪表：预览僵尸和开战共用同一份（也在 _init 里给，开战不走 start_battle 预制体）
 	zombie_refresh_types.assign([
@@ -88,7 +90,7 @@ func _init() -> void:
 	])
 	## 杨桃是通关必需品：预选进卡槽，玩家在选卡界面摘不掉
 	## （原版：默认选中，硬摘掉会弹警告 —— 没杨桃这关永远打不完）
-	pre_choosed_card_list_plant.assign([CharacterRegistry.PlantType.P030StarFruit])
+	prechosen_cards = ResourceCardReference.create_plant_list([CharacterRegistry.PlantType.P030StarFruit])
 
 
 #region 进关打点：轮廓点 + 限种 + 绘制层
@@ -191,15 +193,23 @@ func get_star_center_global_position() -> Vector2:
 #endregion
 
 
+#region 进度条口径
+## 本关进度条代表**种植进度**：已种上杨桃的轮廓点数 / 轮廓点总数（种满 = 100% = 掉奖杯）
+## 波次只是「4 面旗帜」的倒计时，不占进度条（进度条上不画旗帜，见 SeeingStarsProgressProvider）
+func create_progress_provider() -> LevelProgressProvider:
+	return SeeingStarsProgressProvider.new()
+#endregion
+
+
 func run_flow(mg: MainGameManager) -> void:
 	## 展示僵尸
-	await prefab.show_zombie(zombie_refresh_types)
+	await show_zombie(zombie_refresh_types)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 初始化小推车
-	await prefab.init_lawn_mover()
+	await init_lawn_mover()
 	## 准备安放植物
-	await prefab.ready_set_plant()
+	await ready_set_plant()
 	## 开战：出怪参数已经在 _init 里写进关卡数据，这里只管把主游戏开起来
 	await mg.main_game_start()
 	## 观星的胜负判定：种满就赢，第 4 面旗帜升起还没种满就输

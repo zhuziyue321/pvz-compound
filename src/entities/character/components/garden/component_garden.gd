@@ -46,6 +46,8 @@ var plant_cell_garden:PlantCellGarden
 signal signal_sprout_grow
 
 func _ready() -> void:
+	## 必须调 super：ComponentNormBase._ready() 负责「场景里配了 is_enable_default = false 就禁用组件」
+	super._ready()
 	## 需求气泡
 	garden_speech_bubble = SceneRegistry.GARDEN_SPEECH_BUBBLE.instantiate()
 	add_child(garden_speech_bubble)

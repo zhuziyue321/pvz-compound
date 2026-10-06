@@ -12,8 +12,8 @@ class_name ConstFeatureSwitch
 ##   / 冒险 4-6 戴夫赠礼对话（adventure_04_06）
 ##
 ## ZOMBIE_CARD_ENABLED —— 选卡界面的僵尸卡片
-##   待选卡槽的僵尸候选卡页（CardSlotCandidate）/ 关卡预选僵尸卡（pre_choosed_card_list_zombie，
-##   含 card_slot_norm 这条预选通道）/「重选上次卡片」里的僵尸卡
+##   待选卡槽的僵尸候选卡页（CardSlotCandidate）/ 关卡预选僵尸卡（LevelData.prechosen_cards 里的
+##   Zombie 条目，含 card_slot_norm 这条预选通道）/「重选上次卡片」里的僵尸卡
 ##   注意：解谜模式「我是僵尸」关卡靠预选僵尸卡开局，关掉后这些关卡没有可用卡片。
 ##
 ## 关联：ConstUnlockLevel ｜ HandComponentGlove ｜ CardSlotCandidate ｜ CardSlotNorm

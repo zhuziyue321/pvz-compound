@@ -31,23 +31,11 @@ func _init() -> void:
 	zombie_multy = 4
 	## 原版「蹦蹦舞会 / 全面冻结」共有的超长开场：摆完植物要等约 55 秒才来第一波
 	first_wave_delay = 55.0
-	## 屋顶要花盆才能种：先给每一行摆一个（与 survival_flag_05_roof 同一套写法）
-	var pre_plant_in_level_0 := PrePlantResource.new()
-	pre_plant_in_level_0.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_0.plant_cell_pos = Vector2i(0, 1)
-	var pre_plant_in_level_1 := PrePlantResource.new()
-	pre_plant_in_level_1.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_1.plant_cell_pos = Vector2i(0, 2)
-	var pre_plant_in_level_2 := PrePlantResource.new()
-	pre_plant_in_level_2.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_2.plant_cell_pos = Vector2i(0, 3)
-	var pre_plant_in_level_3 := PrePlantResource.new()
-	pre_plant_in_level_3.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_3.plant_cell_pos = Vector2i(0, 4)
-	all_pre_plant_data.assign([pre_plant_in_level_0, pre_plant_in_level_1, pre_plant_in_level_2, pre_plant_in_level_3])
 
 
 func run_flow(_mg: MainGameManager) -> void:
+	## 屋顶要花盆才能种：先给左侧 4 列铺上（与 survival_flag_05_roof 同一套写法）
+	await plant_flower_pot_columns(4)
 	## 出怪表：本关多处要用同一份，抽成变量避免重复写
 	## 原版除旗帜波外**全是蹦蹦僵尸**，所以这里只有一种 —— 预览僵尸也是清一色蹦蹦
 	var zombie_list: Array[CharacterRegistry.ZombieType] = [
@@ -55,12 +43,12 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战（原版 3 面旗帜 = 30 波）
-	await prefab.start_battle(30, zombie_list)
+	await start_battle(30, zombie_list)

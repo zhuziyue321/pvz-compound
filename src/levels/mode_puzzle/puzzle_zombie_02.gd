@@ -18,7 +18,7 @@ func _init() -> void:
 	monster_mode = ConstLevelData.E_MonsterMode.Null
 	start_sun = 50
 	max_choosed_card_num = 3
-	pre_choosed_card_list_zombie.assign([1, 7, 5])
+	prechosen_cards = ResourceCardReference.create_zombie_list([1, 7, 5])
 	is_zombie_mode = true
 	## 原版本关的纸板植物: 豌豆射手(1) / 向日葵(2) / 寒冰射手(6) / 地刺(22)
 	plant_col_on_zombie_mode = 3
@@ -44,13 +44,13 @@ func _init() -> void:
 func run_flow(mg: MainGameManager) -> void:
 	if mg.curr_game_round == 1:
 		## 保龄球红线（仅第 1 轮）
-		await prefab.bowling_stripe()
+		await bowling_stripe()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(-1, [
+	await start_battle(-1, [
 		CharacterRegistry.ZombieType.Z001Norm,
 		CharacterRegistry.ZombieType.Z005Bucket,
 		CharacterRegistry.ZombieType.Z007ScreenDoor,

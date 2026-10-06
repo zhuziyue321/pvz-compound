@@ -4,9 +4,8 @@ class_name Bullet000ParabolaBase
 @onready var movement_component: BulletMovementParabola = $MovementComponent
 
 ## 抛物线(贝塞尔曲线)子弹需要根据敌人位置每帧更新(_ready之前,即init 赋值)
+## 僵王是正式角色（ZB000Base 继承 Character000Base），与普通僵尸走同一个字段
 var target_enemy: Character000Base
-## 僵王博士目标（不是 Character000Base，只有低头期间可命中）
-var target_zomboss: ZombossBoss
 ## 敌人位置(init赋值),若子弹创建时，敌人已经死亡，使用该位置作为终点位置
 var target_enemy_glo_pos_init: Vector2
 ## 是否被弹开
@@ -25,10 +24,7 @@ func _ready() -> void:
 	super()
 
 	## 子弹实例化后，目标未消失，初始化目标位置,否则使用 target_enemy_glo_pos_init
-	if is_instance_valid(target_zomboss) and is_instance_valid(target_zomboss.hurt_box_component):
-		## 僵王：瞄准点在受击框下方（PULT_AIM_OFFSET），不再叠加组件的上偏移
-		movement_component.set_target_last_global_pos(_zomboss_aim_pos(), false)
-	elif is_instance_valid(target_enemy) and is_instance_valid(target_enemy.hurt_box_component):
+	if is_instance_valid(target_enemy) and is_instance_valid(target_enemy.hurt_box_component):
 		movement_component.parabola_movement_ready(target_enemy.hurt_box_component.global_position)
 	else:
 		movement_component.parabola_movement_ready(target_enemy_glo_pos_init)
@@ -51,35 +47,21 @@ func init_bullet(bullet_paras:Dictionary):
 
 	## 抛物线子弹初始化
 	target_enemy = bullet_paras.get(E_InitParasAttr.Enemy, null)
-	target_zomboss = bullet_paras.get(E_InitParasAttr.ZombossBoss, null)
 	## 敌人当前帧的位置，这个必须要的， 如果敌人消失，无法确定其位置，使用该位置确定贝塞尔曲线
 	## 用 get() 兜底：不传该键（例如手动构造参数）时直接用原点，不要下标越界
 	target_enemy_glo_pos_init = bullet_paras.get(E_InitParasAttr.EnemyGloPos, Vector2.ZERO)
 
 
-## 僵王的抛物线瞄准点（受击框下方，与 ZombossBoss.PULT_AIM_OFFSET 一致）
-func _zomboss_aim_pos() -> Vector2:
-	if not is_instance_valid(target_zomboss) or not is_instance_valid(target_zomboss.hurt_box_component):
-		return target_enemy_glo_pos_init
-	return target_zomboss.hurt_box_component.global_position + ZombossBoss.PULT_AIM_OFFSET
-
-
 func _physics_process(delta: float) -> void:
 	## 未被弹开 若敌人存在且敌人还未死亡,更新其位置
-	if not is_bounce and is_instance_valid(target_zomboss) and not target_zomboss.is_dead and target_zomboss.is_head_vulnerable:
-		movement_component.set_target_last_global_pos(_zomboss_aim_pos(), false)
-	elif not is_bounce and is_instance_valid(target_enemy) and not target_enemy.is_death:
+	if not is_bounce and is_instance_valid(target_enemy) and not target_enemy.is_death:
 		movement_component.set_enemy_last_global_pos(target_enemy)
 
 	## 移动子弹，若移动失败，说明到最终点，攻击null销毁子弹
 	if not movement_component.physics_process_bullet_move(delta):
 		## 没有被弹开，有攻击特效
 		if not is_bounce:
-			## 落点是僵王且它还低着头：直接结算给僵王
-			if is_instance_valid(target_zomboss) and not target_zomboss.is_dead and target_zomboss.is_head_vulnerable:
-				attack_once_boss(target_zomboss)
-			else:
-				attack_once(null)
+			attack_once(null)
 		else:
 			queue_free()
 

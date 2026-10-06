@@ -1,4 +1,5 @@
 extends Control
+
 class_name LevelInfo
 
 @onready var round_label: Label = $RoundLabel

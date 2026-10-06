@@ -45,7 +45,7 @@ func _init() -> void:
 
 func run_flow(_mg: MainGameManager) -> void:
 	## 开战
-	await prefab.start_battle(-1, [
+	await start_battle(-1, [
 		CharacterRegistry.ZombieType.Z001Norm,
 		CharacterRegistry.ZombieType.Z005Bucket,
 		CharacterRegistry.ZombieType.Z016Jackbox,

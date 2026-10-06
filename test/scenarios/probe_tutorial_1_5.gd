@@ -1,15 +1,19 @@
 extends RefCounted
 ## 探针 PROBE8c：新手教程（冒险模式 1-5 铲子教学 / 保龄球关）
 ## 覆盖：
-##   1. 1-5 的开场顺序：戴夫第一段对话 → 玩家铲光豌豆射手 → 戴夫第二段对话（保龄球惊喜）
-##      → 预览僵尸 → 正式开局（教程是「开场教程」，整段在关卡开局之前跑完）
+##   1. 1-5 的开场顺序：戴夫第一段对话（清草坪）→ 玩家铲光豌豆射手 → 戴夫第二段对话（保龄球惊喜）
+##      → 预览僵尸 → 正式开局（整段教学排在关卡开局之前）
 ##   2. 戴夫说两段话（开场 CRAZY_DAVE_2400~2406、铲光后 CRAZY_DAVE_2410~2415），逐句点击推进
 ##   3. 红线在戴夫念到「我们去玩保龄球！」的同一时刻出现（之前一直藏着）
-##   4. 教程按原版顺序推进：拿起铲子 → 铲掉一株 → 铲光草坪 → 戴夫惊喜（共 4 步，
-##      1-5 没有「干得漂亮」提示，戴夫说完就直接收尾进关卡）
-##   5. 铲光之前传送带不启动（由关卡开局流程接管），开局后传送带送卡、第一波僵尸出动
+##   4. 教学按原版顺序推进：拿起铲子 → 铲掉一株 → 铲光草坪 → 戴夫惊喜
+##      （1-5 没有「干得漂亮」提示，戴夫说完就收尾进关卡）
+##   5. 铲光之前传送带不启动（传送带跟着「开战」走），开局后传送带送卡、第一波僵尸出动
 ##   6. 箭头跟着目标走（卡槽里的铲子 / 草坪上还活着的植物）
-##   7. 教程结束后提示条消失；已通关 1-5 后再进本关不再播教程与戴夫对话、传送带照常自动启动
+##   7. 教学结束后提示条关掉；已通关 1-5 后再进本关不再播教學与戴夫对话、传送带照常自动启动
+##
+## ⚠️ 1-5 的铲子教学就是**关卡流程里的一段**（adventure_01_05.gd 的 `_shovel_tutorial_flow`），
+## 没有 TutorialManager、没有步骤下标，推进判据一律用「提示文本」
+## （文本在关卡提示条上，见 TutorialAdviceUI.find_level_hint）。
 ## 机器可读汇总：最后一行 [TUTORIAL15] result=PASS|FAIL failed=<n>
 
 var _failed := 0
@@ -26,16 +30,14 @@ const DAVE_TALK_BOWLING := "我们去玩保龄球！"
 const EXPECT_PRE_PLANT_POS := [Vector2i(2, 6), Vector2i(3, 8), Vector2i(4, 7)]
 ## 戴夫对话的点击位置（设计分辨率 800x600 的屏幕中心；戴夫的点击面板覆盖全屏，点哪都能推进）
 const DAVE_CLICK_POS := Vector2(400, 300)
-## 1-5 教程的完整顺序（步骤下标 -> 提示文本）；第 3 步是戴夫惊喜对话，没有提示文本
-## 原版 1-5 到戴夫惊喜为止，没有「干得漂亮」这一步
-const EXPECT_ADVICE := {
-	0: ADVICE_TAKE_SHOVEL,
-	1: ADVICE_DIG_ONE,
-	2: ADVICE_DIG_ALL,
-	3: "",
-}
-## 实际播过的提示（步骤下标 -> 提示文本），由 signal_step_changed 记录
-var _advice_by_step: Dictionary = {}
+## 原版 1-5 教学的完整顺序（按提示出现的先后）；戴夫惊喜对话不算提示
+const EXPECT_ADVICE: Array[String] = [
+	ADVICE_TAKE_SHOVEL,
+	ADVICE_DIG_ONE,
+	ADVICE_DIG_ALL,
+]
+## 实际播过的提示（按顺序），由提示条的 signal_advice_changed 记录
+var _advice_seq: Array[String] = []
 ## 本次进关是否出现过戴夫（STEP6 验证「已通关不再播戴夫对话」用）
 var _dave_seen := false
 
@@ -53,36 +55,26 @@ func run(a) -> void:
 		"101_0_0004": {"IsSuccess": true},
 	}
 
-	## 第一次进关：开场教程在关卡开局之前跑，进关后先停在教程里
+	## 第一次进关：开场教学在关卡开局之前跑，进关后先停在「清草坪」这一步
 	if not await _enter_level(a, true):
-		a.log("!! 进不了关卡（教程没起来）")
+		a.log("!! 进不了关卡（教学没起来）")
 		_finish(a)
 		return
 	await a.wait(1.0)
 
 	var mg = Global.main_game
-	var tut = mg.tutorial_manager
-	var para = mg.game_para
 
-	# ------------------------------------------------ STEP1 教程启动与预置植物
-	a.log("STEP1 教程启动、预置豌豆射手、传送带未启动")
-	## 教程 / 对话都在 run_flow() 里现场构造，静态读不到（见 _build_tutorial / _build_dave_dialog）
-	_check(a, "1-5 配置了教程数据", para.is_tutorial(), str(para.has_tutorial()))
-	_check(a, "1-5 配置了关卡开场戴夫对话", para.has_dave_dialog(),
-		str(para.has_dave_dialog()))
-	_check(a, "创建了教程管理器", tut != null, "null" if tut == null else str(tut.get_path()))
-	if tut == null:
+	# ------------------------------------------------ STEP1 教学启动与预置植物
+	a.log("STEP1 教学启动、预置豌豆射手、传送带未启动")
+	var hint := _hint()
+	_check(a, "本关挂出了提示条", hint != null, str(hint))
+	if hint == null:
 		_finish(a)
 		return
-	_check(a, "教程正在运行", tut.is_running, str(tut.is_running))
-	_check(a, "1-5 是开场教程（在关卡开局之前跑）", tut.is_opening_tutorial(),
-		str(tut.is_opening_tutorial()))
-	_check(a, "教程运行在开局之前（还没进入 MAIN_GAME）",
-		mg.main_game_progress != MainGameManager.E_MainGameProgress.MAIN_GAME,
-		str(mg.main_game_progress))
-	## 第 1 步的信号在教程启动时就发过了，这里补记
-	tut.signal_step_changed.connect(_on_step_changed.bind(tut))
-	_advice_by_step[tut.curr_step_index] = tut.get_advice_text()
+	## 第 1 句在探针接进来之前就播过了，这里补记
+	hint.signal_advice_changed.connect(_on_advice_changed)
+	if _hint_text() != "" and not _advice_seq.has(_hint_text()):
+		_advice_seq.append(_hint_text())
 	_check(a, "玩家已拿到铲子（已通关 1-4）", Global.global_game_state.is_shovel_unlocked(),
 		str(Global.global_game_state.get_max_success_adventure_level()))
 	_check(a, "开局草坪上有 3 株豌豆射手",
@@ -91,17 +83,15 @@ func run(a) -> void:
 	var pre_pos := _pre_plant_positions(mg)
 	_check(a, "三株豌豆射手落在原版位置 (2,6)(3,8)(4,7)", pre_pos == EXPECT_PRE_PLANT_POS,
 		str(pre_pos))
-	_check(a, "第 1 步提示=点击拾取铲子", tut.get_advice_text() == ADVICE_TAKE_SHOVEL,
-		tut.get_advice_text())
-	_check(a, "提示条可见", tut.is_advice_visible(), str(tut.is_advice_visible()))
-	_check(a, "第 1 步箭头指向铲子", tut.get_pointer_target_position() != null,
-		str(tut.get_pointer_target_position()))
+	_check(a, "第 1 句提示=点击拾取铲子", _hint_text() == ADVICE_TAKE_SHOVEL, _hint_text())
+	_check(a, "提示条可见", hint.is_advice_visible(), str(hint.is_advice_visible()))
+	_check(a, "箭头指向铲子", hint.is_pointer_visible(), str(hint.is_pointer_visible()))
 	var conveyor = mg.card_manager.card_slot_conveyor_belt
 	_check(a, "1-5 是传送带卡槽", conveyor != null, str(conveyor))
-	_check(a, "教程期间传送带未启动", not mg.card_manager.is_conveyor_belt_started,
+	_check(a, "教学期间传送带未启动", not mg.card_manager.is_conveyor_belt_started,
 		str(mg.card_manager.is_conveyor_belt_started))
 	var wave_manager = mg.zombie_manager.zombie_wave_manager
-	_check(a, "教程期间第一波未开始", wave_manager.curr_wave == -1, str(wave_manager.curr_wave))
+	_check(a, "教学期间第一波未开始", wave_manager.curr_wave == -1, str(wave_manager.curr_wave))
 	_check(a, "戴夫说保龄球之前红线藏着", not _is_stripe_visible(mg), str(_is_stripe_visible(mg)))
 
 	# ------------------------------------------------ STEP2 拿起铲子
@@ -113,18 +103,15 @@ func run(a) -> void:
 		return
 	var shovel_pos: Vector2 = a.screen_center(ui_shovel)
 	await a.click(shovel_pos.x, shovel_pos.y)
-	if not await _wait_step(a, 1, 10.0):
-		_check(a, "拿铲子后进入第 2 步", false, "curr_step_index=" + str(tut.curr_step_index))
+	if not await _wait_advice(a, ADVICE_DIG_ONE, 10.0):
+		_check(a, "拿铲子后走到「点击移除一颗植物」", false, "advice=" + _hint_text())
 		_finish(a)
 		return
-	_check(a, "拿铲子后进入第 2 步", tut.curr_step_index == 1, str(tut.curr_step_index))
+	_check(a, "拿铲子后走到「点击移除一颗植物」", true, _hint_text())
 	_check(a, "手上拿着铲子",
 		mg.hand_manager.get_curr_hand_type() == HandComponentBase.E_HandComponentType.Shovel,
 		str(mg.hand_manager.get_curr_hand_type()))
-	_check(a, "第 2 步提示=点击移除一颗植物", tut.get_advice_text() == ADVICE_DIG_ONE,
-		tut.get_advice_text())
-	_check(a, "第 2 步箭头指向植物", tut.get_pointer_target_position() != null,
-		str(tut.get_pointer_target_position()))
+	_check(a, "箭头指向草坪上的植物", _hint().is_pointer_visible(), str(_hint().is_pointer_visible()))
 
 	# ------------------------------------------------ STEP3 铲掉一株
 	a.log("STEP3 铲掉第一株豌豆射手")
@@ -132,11 +119,10 @@ func run(a) -> void:
 		_check(a, "铲掉第一株", false, "剩余=" + str(_count_lawn_plants(mg)))
 		_finish(a)
 		return
-	if not await _wait_step(a, 2, 10.0):
-		_check(a, "铲掉一株后走到第 3 步", false, "curr_step_index=" + str(tut.curr_step_index))
+	if not await _wait_advice(a, ADVICE_DIG_ALL, 10.0):
+		_check(a, "铲掉一株后走到「一直挖吧」", false, "advice=" + _hint_text())
 		_finish(a)
 		return
-	_check(a, "第 3 步提示=一直挖吧", tut.get_advice_text() == ADVICE_DIG_ALL, tut.get_advice_text())
 	_check(a, "草坪上还剩 2 株", _count_lawn_plants(mg) == 2, str(_count_lawn_plants(mg)))
 	_check(a, "铲掉一株后铲子已放回（用完）", not mg.hand_manager.is_holding_hand(),
 		str(mg.hand_manager.is_holding_hand()))
@@ -150,13 +136,10 @@ func run(a) -> void:
 		_check(a, "铲光草坪", false, "剩余=" + str(_count_lawn_plants(mg)))
 		_finish(a)
 		return
-	if not await _wait_step(a, 3, 10.0):
-		_check(a, "铲光后走到第 4 步（戴夫惊喜对话）", false,
-			"curr_step_index=" + str(tut.curr_step_index))
+	if not await _wait_hint_hidden(a, 10.0):
+		_check(a, "铲光后教学收尾", false, "advice=" + _hint_text())
 		_finish(a)
 		return
-	_check(a, "第 4 步是戴夫对话（没有提示文本）", tut.get_advice_text() == "",
-		tut.get_advice_text())
 	if not await _wait_dave_appear(a, 10.0):
 		_check(a, "铲光后戴夫出场说保龄球惊喜", false, "戴夫没出现")
 		_finish(a)
@@ -172,21 +155,16 @@ func run(a) -> void:
 		_finish(a)
 		return
 	_check(a, "草坪已铲光", _count_lawn_plants(mg) == 0, str(_count_lawn_plants(mg)))
-	## 原版 1-5 到戴夫惊喜为止：没有「干得漂亮」这一步，戴夫说完就收尾进关卡
-	_check(a, "1-5 教程共 4 步（没有「干得漂亮」提示）", tut.tutorial_data.steps.size() == 4,
-		str(tut.tutorial_data.steps.size()))
+	_check(a, "教学收尾后提示条已关掉", not _hint().is_advice_visible(),
+		str(_hint().is_advice_visible()))
+	_check(a, "教学收尾后箭头已收起", not _hint().is_pointer_visible(),
+		str(_hint().is_pointer_visible()))
+	_check(a, "教学提示共 3 句（没有「干得漂亮」）", _advice_seq == EXPECT_ADVICE, str(_advice_seq))
 
-	# ------------------------------------------------ STEP5 教程收尾 → 预览僵尸 → 开局
-	a.log("STEP5 教程收尾（预览僵尸 → 正式开局：传送带与第一波僵尸由关卡流程启动）")
-	if not await _wait_tutorial_end(a, 15.0):
-		_check(a, "最后一步结束后教程收尾", false,
-			"curr_step_index=" + str(tut.curr_step_index) + " running=" + str(tut.is_running))
-		_finish(a)
-		return
-	_check(a, "教程已结束", tut.is_finished and not tut.is_running,
-		"finished=" + str(tut.is_finished) + " running=" + str(tut.is_running))
-	if not await _wait_main_game(a, 40.0):
-		_check(a, "教程结束后关卡正常开局", false, "progress=" + str(mg.main_game_progress))
+	# ------------------------------------------------ STEP5 教学收尾 → 预览僵尸 → 开局
+	a.log("STEP5 教学收尾（预览僵尸 → 正式开局：传送带与第一波僵尸由关卡流程启动）")
+	if not await _wait_battle_started(a, 60.0):
+		_check(a, "教学结束后关卡正常开局", false, "传送带未启动")
 		_finish(a)
 		return
 	await a.wait(1.0)
@@ -200,11 +178,9 @@ func run(a) -> void:
 	_check(a, "传送带已送来卡片", conveyor != null and not conveyor.curr_cards.is_empty(),
 		"null" if conveyor == null else str(conveyor.curr_cards.size()))
 	_check(a, "开局后红线可见", _is_stripe_visible(mg), str(_is_stripe_visible(mg)))
-	_check(a, "教程结束后提示条已移除", tut.get_advice_ui() == null, str(tut.get_advice_ui()))
-	_check(a, "教程提示顺序与配置一致", _advice_by_step == EXPECT_ADVICE, str(_advice_by_step))
 
-	# ------------------------------------------------ STEP6 已通关后不再播教程
-	a.log("STEP6 已通关 1-5 后再进本关（不播教程与戴夫对话，传送带自动启动）")
+	# ------------------------------------------------ STEP6 已通关后不再播教学
+	a.log("STEP6 已通关 1-5 后再进本关（不播教学与戴夫对话，传送带自动启动）")
 	state.curr_all_level_state_data[SAVE_NAME_05] = {"IsSuccess": true}
 	_dave_seen = false
 	if not await _enter_level(a, false):
@@ -213,21 +189,36 @@ func run(a) -> void:
 		return
 	await a.wait(1.5)
 	_check(a, "已通关时不再播戴夫对话", not _dave_seen, str(_dave_seen))
-	_check(a, "已通关时不再创建教程管理器", Global.main_game.tutorial_manager == null,
-		str(Global.main_game.tutorial_manager))
-	_check(a, "没有教程时传送带照常自动启动", Global.main_game.card_manager.is_conveyor_belt_started,
+	_check(a, "已通关时不再播教学（没有提示条）",
+		_hint() == null or not _hint().is_advice_visible(),
+		str(_hint() != null and _hint().is_advice_visible()))
+	_check(a, "没有教学时传送带照常自动启动", Global.main_game.card_manager.is_conveyor_belt_started,
 		str(Global.main_game.card_manager.is_conveyor_belt_started))
-	_check(a, "没有教程时红线照样出现", _is_stripe_visible(Global.main_game),
+	_check(a, "没有教学时红线照样出现", _is_stripe_visible(Global.main_game),
 		str(_is_stripe_visible(Global.main_game)))
 
 	_finish(a)
 
 
 #region 断言与工具
-## 教程步骤变化：记下这一步实际播出的提示文本
-func _on_step_changed(step_index: int, tut) -> void:
-	if tut != null:
-		_advice_by_step[step_index] = tut.get_advice_text()
+## 本关的提示条（「提示快捷工具」挂的那一条，见 TutorialAdviceUI.find_level_hint）
+func _hint() -> TutorialAdviceUI:
+	if Global.main_game == null:
+		return null
+	return TutorialAdviceUI.find_level_hint(Global.main_game)
+
+
+## 当前提示文本；没有提示条时返回空串
+func _hint_text() -> String:
+	var hint := _hint()
+	return "" if hint == null else hint.get_advice_text()
+
+
+## 提示文本变化：按顺序记录（收起提示的空串不记）
+func _on_advice_changed(text: String) -> void:
+	if text == "":
+		return
+	_advice_seq.append(text)
 
 
 func _check(a, label: String, ok: bool, detail: String = "") -> void:
@@ -245,8 +236,8 @@ func _finish(a) -> void:
 
 
 ## 直接用关卡数据进 1-5 主游戏（选关界面进传送带关要走很长的菜单路径）
-## wait_tutorial=true：等开场教程跑起来（教程在关卡开局之前）；
-## false：等关卡进入 MAIN_GAME（已通关时不播教程）
+## wait_tutorial=true：等开场教学跑起来（教学在关卡开局之前）；
+## false：等关卡进入 MAIN_GAME（已通关时不播教学）
 func _enter_level(a, wait_tutorial: bool) -> bool:
 	if wait_tutorial:
 		## 先等引擎把真实主场景（开始菜单）稳定下来
@@ -258,11 +249,11 @@ func _enter_level(a, wait_tutorial: bool) -> bool:
 		Global.main_scene_registry.MainScenesMap[para.game_sences])
 	if not await _wait_main_game_created(a, 40.0):
 		return false
-	## 开场戴夫对话（在教程之前）：逐句点完
+	## 开场戴夫对话（在教学之前）：逐句点完
 	if not await _wait_opening_dave(a, 40.0):
 		return false
 	if wait_tutorial:
-		return await _wait_tutorial_start(a, 20.0)
+		return await _wait_hint_visible(a, 20.0)
 	return await _wait_main_game(a, 40.0)
 
 
@@ -277,7 +268,22 @@ func _wait_main_game_created(a, timeout: float) -> bool:
 	return false
 
 
+## 等关卡开战（传送带与第一波僵尸都由「开战」启动）
+## ⚠️ 不能拿 main_game_progress == MAIN_GAME 当开战判据：
+## 教学里的「允许操作」事件也把阶段推进到 MAIN_GAME（那时还没开战）
+func _wait_battle_started(a, timeout: float) -> bool:
+	var waited := 0.0
+	while waited < timeout:
+		var mg = Global.main_game
+		if mg != null and mg.card_manager.is_conveyor_belt_started:
+			return true
+		await a.wait(0.5)
+		waited += 0.5
+	return false
+
+
 ## 等主游戏进入 MAIN_GAME 阶段：关卡开场的戴夫对话要逐句点完才进得去
+## （已通关不播教学的分支没有「允许操作」，阶段推进只发生在开战）
 func _wait_main_game(a, timeout: float) -> bool:
 	var waited := 0.0
 	while waited < timeout:
@@ -291,7 +297,7 @@ func _wait_main_game(a, timeout: float) -> bool:
 	return false
 
 
-## 等开场戴夫出现并点完（教程在戴夫说完之后才开始）
+## 等开场戴夫出现并点完（教学在戴夫说完之后才开始）
 ## 本关不播开场对话时（已通关重进），等到关卡离开选卡阶段就返回
 func _wait_opening_dave(a, timeout: float) -> bool:
 	var waited := 0.0
@@ -307,8 +313,9 @@ func _wait_opening_dave(a, timeout: float) -> bool:
 				continue
 			if is_dave_appeared:
 				return true
-			if (mg.tutorial_manager != null and mg.tutorial_manager.is_running) \
-				or mg.main_game_progress != MainGameManager.E_MainGameProgress.CHOOSE_CARD:
+			## 已通关时不播开场对话：等到关卡离开选卡阶段（或教学已经放开玩家的手）就返回
+			if mg.is_lawn_operation_allowed \
+					or mg.main_game_progress != MainGameManager.E_MainGameProgress.CHOOSE_CARD:
 				return true
 		await a.wait(0.5)
 		waited += 0.5
@@ -326,19 +333,42 @@ func _wait_wave_start(a, wave_manager, timeout: float) -> bool:
 	return false
 
 
-## 等教程开始（开场教程在关卡开局之前跑）
-func _wait_tutorial_start(a, timeout: float) -> bool:
+## 等提示条出现（第一句教学出来的那一刻）
+func _wait_hint_visible(a, timeout: float) -> bool:
 	var waited := 0.0
 	while waited < timeout:
-		var tut = Global.main_game.tutorial_manager
-		if tut != null and tut.is_running:
+		var hint := _hint()
+		if hint != null and hint.is_advice_visible():
 			return true
 		await a.wait(0.25)
 		waited += 0.25
 	return false
 
 
-## 等戴夫出场（教程第 4 步的惊喜对话）
+## 等提示条收起（教学收尾）
+func _wait_hint_hidden(a, timeout: float) -> bool:
+	var waited := 0.0
+	while waited < timeout:
+		var hint := _hint()
+		if hint != null and not hint.is_advice_visible():
+			return true
+		await a.wait(0.25)
+		waited += 0.25
+	return false
+
+
+## 等教学说到指定那一句（流程里没有步骤下标，只能看提示文本）
+func _wait_advice(a, expect_text: String, timeout: float) -> bool:
+	var waited := 0.0
+	while waited < timeout:
+		if _hint_text() == expect_text:
+			return true
+		await a.wait(0.25)
+		waited += 0.25
+	return false
+
+
+## 等戴夫出场（教学收尾后的惊喜对话）
 func _wait_dave_appear(a, timeout: float) -> bool:
 	var waited := 0.0
 	while waited < timeout:
@@ -387,30 +417,6 @@ func _skip_dave_dialog(a, timeout: float = 40.0) -> bool:
 		await a.wait(0.5)
 		waited += 0.5
 	return _find_dave() == null
-
-
-## 等教程走到指定步骤
-func _wait_step(a, step_index: int, timeout: float) -> bool:
-	var waited := 0.0
-	while waited < timeout:
-		var tut = Global.main_game.tutorial_manager
-		if tut != null and tut.curr_step_index >= step_index:
-			return true
-		await a.wait(0.25)
-		waited += 0.25
-	return false
-
-
-## 等教程结束
-func _wait_tutorial_end(a, timeout: float) -> bool:
-	var waited := 0.0
-	while waited < timeout:
-		var tut = Global.main_game.tutorial_manager
-		if tut != null and tut.is_finished:
-			return true
-		await a.wait(0.25)
-		waited += 0.25
-	return false
 
 
 ## 铲掉一株：手上没铲子就去卡槽拿（铲一下就用掉一把铲子，这是原版规则）

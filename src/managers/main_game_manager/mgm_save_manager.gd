@@ -36,7 +36,7 @@ func save_game_main_game():
 	var path = game_para.get_save_game_path()
 	var err = ResourceSaver.save(save_game_data_main_game, path)
 	if err != OK:
-		push_error("关卡数据存档失败:%s, 错误代码 %d" % [path, err])
+		Log.error("关卡数据存档失败:%s, 错误代码 %d" % [path, err])
 	else:
 		Log.debug(str("关卡数据存档成功：") + str(path))
 		update_level_state_data_multi_round_data(true)

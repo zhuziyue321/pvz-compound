@@ -54,15 +54,15 @@ func run_flow(mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡（本关禁掉了阳光生产类与免费植物）
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 布阵阶段：先拿开局这 5000 阳光把防线种满，点「开始战斗！」才出怪
-	await prefab.wait_battle_start()
+	await wait_battle_start()
 
 	## 每过一波补 250 阳光（信号在每波刷出时发，第 1 波那次是开局，不算「过了一波」）
 	var wave_manager := mg.zombie_manager.zombie_wave_manager
@@ -72,4 +72,4 @@ func run_flow(mg: MainGameManager) -> void:
 	)
 
 	## 开战
-	await prefab.start_battle(MAX_WAVE, zombie_list)
+	await start_battle(MAX_WAVE, zombie_list)

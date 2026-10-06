@@ -34,48 +34,15 @@ func create_wave_zombies(
 
 
 func _init() -> void:
-	var pre_plant_in_level_0 := PrePlantResource.new()
-	pre_plant_in_level_0.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_0.plant_cell_pos = Vector2i(0, 1)
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	var pre_plant_in_level_1 := PrePlantResource.new()
-	pre_plant_in_level_1.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_1.plant_cell_pos = Vector2i(0, 2)
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	var pre_plant_in_level_2 := PrePlantResource.new()
-	pre_plant_in_level_2.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_2.plant_cell_pos = Vector2i(0, 3)
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	var pre_plant_in_level_3 := PrePlantResource.new()
-	pre_plant_in_level_3.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_3.plant_cell_pos = Vector2i(0, 4)
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
-	## 原版后 8 句(警告飞贼僵尸)每轮都说,所以这里不开 dave_dialog_only_first_playthrough
 	game_sences = MainSceneRegistry.MainScenes.MainGameRoof
 	game_BG = ConstLevelData.GameBg.Roof
 	game_BGM = ConstLevelData.GameBGM.Roof
-	all_pre_plant_data.assign([pre_plant_in_level_0, pre_plant_in_level_1, pre_plant_in_level_2, pre_plant_in_level_3])
 	## 蹦极闪电战:不直接出怪,僵尸全部由蹦极僵尸空投进场;大波另外来偷植物的蹦极僵尸
 	## 空投本身是本关专属玩法,写在同目录的 adventure_05_05_bungi_blitz.gd 里,由本脚本创建
 	## 传送带补种 花盆/南瓜头/大嘴花/樱桃炸弹
 	is_bungi = true
 	card_mode = ConstLevelData.E_CardMode.ConveyorBelt
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	3: 2,
 	7: 2,
 	31: 2,
@@ -83,7 +50,7 @@ func _init() -> void:
 	})
 
 
-## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 prefab.dave_dialog
+## 关卡开场戴夫对话：在 run_flow() 里现场构造并传给 dave_dialog
 func _build_dave_dialog() -> CrazyDaveDialogResource:
 	var crazy_dave_dialog_detail_resource_0 := CrazyDaveDialogDetailResource.new()
 	## 原版冒险模式 5-5 开场戴夫台词
@@ -719,6 +686,7 @@ func _build_dave_dialog() -> CrazyDaveDialogResource:
 
 
 func run_flow(_mg: MainGameManager) -> void:
+	await plant_flower_pot_columns(4)
 	## 出怪表：本关多处要用同一份，抽成变量避免重复写
 	var zombie_list: Array[CharacterRegistry.ZombieType] = [
 		CharacterRegistry.ZombieType.Z001Norm,
@@ -728,20 +696,16 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 关卡戴夫对话
-	await prefab.dave_dialog(_build_dave_dialog())
+	await dave_dialog(_build_dave_dialog())
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(20, zombie_list)
+	await start_battle(20, zombie_list)
 
 
-## 本关有开场戴夫对话：对话在 run_flow() 里现场构造（见 _build_dave_dialog），
-## 这里只做声明 —— 有对话就不再播戴夫推销卡槽扩充（见 is_dave_sell_possible）
-func has_dave_dialog() -> bool:
-	return true

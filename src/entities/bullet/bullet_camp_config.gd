@@ -61,7 +61,9 @@ static func get_enemy_camp(camp:CharacterRegistry.CharacterType) -> CharacterReg
 static func get_camp_of_character(character:Node) -> CharacterRegistry.CharacterType:
 	if character is Plant000Base:
 		return CharacterRegistry.CharacterType.Plant
-	if character is Zombie000Base:
+	## 僵王在阵营侧按僵尸处理：植物方子弹能打它，僵尸方子弹不能
+	## （卡牌类型才区分 ZombieBoss，阵营判定不引入新阵营）
+	if character is Zombie000Base or character is ZB000Base:
 		return CharacterRegistry.CharacterType.Zombie
 	return CharacterRegistry.CharacterType.Null
 

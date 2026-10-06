@@ -396,7 +396,7 @@ autopilot 的 `click_first` / `click_node` / `click_plant_cell` 已经全部换�
 - `test/scenarios/probe_puzzle_unlock.gd` —— 冒险 4-6 中途第 5 波掉礼盒解锁解谜模式（配置静态检查 + 真掉一次 + 点开弹出提示 + 掉落位置夹紧后仍在画面内 + 回头确认 3-2 那条没被改坏），报告里出 `[PUZZLEUNLOCK] result=PASS`
 - `test/scenarios/probe_tutorial.gd` —— 1-1 新手教程全流程（原版提示顺序、第一波僵尸的启动时机、已通关不再播），报告里出 `[TUTORIAL] result=PASS`
 - `test/scenarios/probe_tutorial_1_2.gd` —— 1-2 新手教程全流程（向日葵教学顺序、第一波僵尸的启动时机、已通关不再播），报告里出 `[TUTORIAL12] result=PASS`
-- `test/scenarios/probe_tutorial_1_5.gd` —— 1-5 铲子教学全流程（教程共 4 步、**没有「干得漂亮」提示**；开场顺序：**戴夫 7 句开场对话 → 玩家铲光预置的 3 株豌豆射手 → 铲光后戴夫 6 句保龄球惊喜对话、念到「我们去玩保龄球！」的同时红线出现 → 戴夫说完即收尾 → 预览僵尸 → 正式开局**；开局后传送带启动 + 第一波僵尸出动；已通关不再播教程与戴夫对话且传送带照常自动启动、红线照样出现），报告里出 `[TUTORIAL15] result=PASS`
+- `test/scenarios/probe_tutorial_1_5.gd` —— 1-5 铲子教学全流程（教学提示共 3 句、**没有「干得漂亮」提示**；开场顺序：**戴夫 7 句开场对话 → 玩家铲光预置的 3 株豌豆射手 → 铲光后戴夫 6 句保龄球惊喜对话、念到「我们去玩保龄球！」的同时红线出现 → 戴夫说完即收尾 → 预览僵尸 → 正式开局**；开局后传送带启动 + 第一波僵尸出动；已通关不再播教学与戴夫对话且传送带照常自动启动、红线照样出现），报告里出 `[TUTORIAL15] result=PASS`
 - `test/scenarios/probe_4_5.gd` —— 冒险 4-5 砸罐子关的**数据**（无头可跑）：三批罐子占 3 / 4 / 5 列且罐子数 15 / 20 / 25、绿罐 0 / 2 / 3、三段戴夫对话挂在对应轮次、不播「准备-安放-植物」红字、切换批次清空上一批的植物
 - `test/scenarios/probe_4_5_no_round_save.gd` —— 冒险 4-5 **不按批次存档/读档**（无头可跑）：伪造一份「第 3 批已打完」的存档后进关，轮次仍是 1、场上是第 1 批（3 列 15 罐）、旧存档被删、切到第 2 批不写新存档
 - `test/scenarios/probe_4_5_play.gd` —— 冒险 4-5 砸罐子关的**实机**（带窗口）：戴夫开场对话能点完 → 砸光第 1 批 → 戴夫说完「再给你一批」后摆上第 2 批，核对两批的罐子数 / 占列 / 绿罐、切换批次后临时卡片清零
@@ -408,7 +408,7 @@ autopilot 的 `click_first` / `click_node` / `click_plant_cell` 已经全部换�
 - `test/scenarios/probe_x10_note_icon.gd` —— 冒险选关界面 x-10 的「本关看点」图标（1-10 ~ 5-10 都挂纸条 `ZombieNoteSmall.png` 的 `Sprite2D`，不再实例化僵尸），报告里出 `[X10NOTE] result=PASS`
 - `test/scenarios/probe_invisi_ghoul.gd` —— 迷你游戏第 6 关「隐形战争」的隐形渲染（出场本体/影子 alpha=0、冰冻与黄油现形、状态结束后重新隐形，含 1-1 对照组），报告里出 `[INVISIGHOUL] result=PASS`
 - `test/scenarios/probe_zombie_nimble.gd` —— 迷你游戏「僵尸快跑」的全场加速（关卡倍率字段、僵尸 `LevelSpeed` 因子与 2 秒实测位移、豌豆射手攻击 CD 减半，并拿 1-1 当倍率 1.0 的对照组），报告里出 `[NIMBLE] result=PASS`
-- `test/scenarios/probe_slot_machine.gd` —— 迷你游戏第 3 关「拉霸」（UI 已挪到 `src/levels/script/mini_game/slot_machine/`：开局状态、真点拉杆扣 25 阳光、转轮停下、两同/三同分别给免费植物与阳光、累计收集达标后掉奖杯 → 点奖杯进结算），报告里出 `[SLOT] result=PASS`
+- `test/scenarios/probe_slot_machine.gd` —— 迷你游戏第 3 关「拉霸」（UI 已挪到 `src/levels/mode_minigame/minigame_03_slot_machine_ui.gd`：开局状态、真点拉杆扣 25 阳光、转轮停下、两同/三同分别给免费植物与阳光、累计收集达标后掉奖杯 → 点奖杯进结算），报告里出 `[SLOT] result=PASS`
 - `test/scenarios/probe_pogo_party.gd` —— 迷你游戏「蹦蹦舞会」（屋顶 / 30 波 3 旗帜 / 屋顶曲 / 55 秒超长开场 / 预置花盆 + 预览僵尸与第 0~29 波的构成逐波核对：非旗帜波全是蹦蹦僵尸，旗帜波以蹦蹦为主体），报告里出 `[POGOPARTY] result=PASS`
 - `test/scenarios/probe_seed_rain.gd` —— 迷你游戏「种子雨」的天降种子卡（发卡器挂在卡片前景层且定时器在跑 / 12 秒内持续出卡 / 卡片能捡起并能种到草坪 / 走通关结算切出主游戏），报告里出 `[SEEDRAIN] result=PASS`
 

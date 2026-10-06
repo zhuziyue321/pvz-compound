@@ -176,11 +176,10 @@ preview_icon = ExtResource("204_thumb07")
 [node name="Label" parent="AllPage/GridContainer/ChooseLevelButton9/TextureButton" index="0"]
 text = "僵尸水族馆"
 
-; 第 9 关「僵尸迷阵旋风」未实现（见 src/levels/mode_minigame/minigame_09_beghouled_twist.gd），
-; 这里留一个空槽位保持原版 20 关的排列顺序；做完后把 level_script / preview_icon 两行加回来即可。
-; 空槽位 = 没有 level_script 的 ChooseLevelButton：它的按钮与通关标记都不显示（见 choose_level_button.gd）
 [node name="ChooseLevelButton10" parent="AllPage/GridContainer" index="8" instance=ExtResource("9_xsph7")]
 layout_mode = 2
+level_script = ExtResource("105_twist")
+preview_icon = ExtResource("213_thumb20")
 
 [node name="Label" parent="AllPage/GridContainer/ChooseLevelButton10/TextureButton" index="0"]
 text = "僵尸迷阵旋风"

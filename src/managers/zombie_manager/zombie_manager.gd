@@ -18,11 +18,18 @@ const PRESET_ICE_ROAD_POS_OFFSET := Vector2(80, -22)
 @onready var zombie_show_in_start: ZombieShowInStart = $ZombieShowInStart
 ## 僵尸数量label
 @onready var label_zombie_sum: Label = %LabelZombieSum
-## 波次旗帜进度条：本体这边的波次管理器自己也读 %FlagProgressBar，
-## 运行期注入的出怪器没有场景 owner 取不到，由这里转交（见 set_wave_source / init_source）
-@onready var flag_progress_bar: FlagProgressBar = %FlagProgressBar
 ## 所有僵尸根节点
 @onready var zombies_root: Node2D = %ZombiesRoot
+## 僵王独立挂载，不混入会被当作僵尸行遍历的 ZombiesRoot。
+@onready var zombie_boss_root: Node2D = get_node_or_null("%ZombieBossRoot") as Node2D
+
+## 出战僵王成功入树、死亡或移除后发出，供关卡按当前存活实例选择战斗音乐与血条。
+signal signal_living_bosses_changed()
+
+## 僵王登记与生命周期管理。
+## 业务本体在 zm_boss_registry.gd（含 11 个私有变量），这里只持有实例并转发，避免本文件继续膨胀。
+var boss_registry: ZmBossRegistry
+
 
 #region 僵尸管理器参数
 ## 刷怪类型
@@ -42,10 +49,46 @@ var wave_source: ZombieWaveSourceBase = null
 func set_wave_source(new_wave_source: ZombieWaveSourceBase) -> void:
 	wave_source = new_wave_source
 
-## 第一波是否已经启动：开战 / 时间轴的 Wave 事件 / 教程都可能开第一波，只开一次
-## （多轮游戏切轮时重置，见 start_next_game_zombie_mananger_update）
+## 第一波是否已经启动：整局只开一次（多轮游戏切轮时重置，见 start_next_game_zombie_mananger_update）
 var is_first_wave_started := false
 
+#endregion
+
+#region 波次进度
+## 下面这一组是**关卡进度条默认口径「战斗进度」的查询口**：
+## 出怪侧（波次管理器 / 关卡注入的出怪器）各自算好自己的进度，这里统一转发一次，
+## 数据源（LevelProgressBattleProvider）只认 ZombieManager，出怪器换了不用改 UI。
+## 进度条节点本身由 LevelProgressBarController 写，谁都不在这里碰它。
+
+## 当前战斗进度百分比（0~100）
+func get_battle_progress() -> float:
+	if wave_source != null:
+		return wave_source.get_battle_progress()
+	return zombie_wave_manager.get_battle_progress()
+
+## 本关的波次是否已经开打（开打前进度条不显示）
+func is_battle_started() -> bool:
+	if wave_source != null:
+		return wave_source.is_battle_started()
+	return zombie_wave_manager.is_battle_started()
+
+## 进度条上要画几面旗帜（<= 0 = 不画）
+func get_battle_flag_num() -> int:
+	if wave_source != null:
+		return wave_source.get_flag_num()
+	return zombie_wave_manager.get_flag_num()
+
+## 取走「本帧要升旗」的旗帜下标（-1 = 不升）
+func take_battle_flag_raise_index() -> int:
+	if wave_source != null:
+		return wave_source.take_flag_raise_index()
+	return zombie_wave_manager.take_flag_raise_index()
+
+## 取走「本帧要收起所有旗帜」的请求（多轮游戏切新一轮）
+func take_battle_flag_reset() -> bool:
+	if wave_source != null:
+		return wave_source.take_flag_reset()
+	return zombie_wave_manager.take_flag_reset()
 #endregion
 
 #region 多轮游戏
@@ -85,6 +128,7 @@ var ice_timer:Timer
 signal signal_curr_zombie_num_change(num:int)
 
 func _ready():
+	boss_registry = ZmBossRegistry.new(self)
 	## 注册事件总线
 	EventBus.subscribe("ice_all_zombie", ice_all_zombie)
 	## 火爆辣椒销毁道具[冰道和梯子]
@@ -162,7 +206,7 @@ func init_manager() -> void:
 			## 出怪器由关卡的玩法规则注入（见 LevelRuleHammerZombie.install）：
 			## 本体只认 ZombieWaveSourceBase 这个基类，不认识任何具体管理器
 			if wave_source != null:
-				wave_source.init_source(game_para, flag_progress_bar)
+				wave_source.init_source(game_para)
 				## 波次刷新时判断是否为最后一波，删除多余魅惑僵尸
 				wave_source.signal_wave_refresh.connect(wave_refresh)
 			else:
@@ -176,10 +220,10 @@ func apply_zombie_refresh_types(types: Array[CharacterRegistry.ZombieType]) -> v
 	zombie_wave_manager.zombie_wave_create_manager.update_zombie_refresh_types()
 
 
-## 开始第一波
-## 调用方有三个（主游戏开战、时间轴的 Wave 事件、教程管理器），只开第一次：
-## 旧流程里开战会顺手起第一波，时间轴接管后 Wave 事件也会调一次，重复调会跳波
+## 开战：起第一波僵尸 —— 整局只开一次，重复调会跳波
 func start_game():
+	## 僵王自动生成与自然波次分开：配置了 boss_spawn_wave == 0 的关卡在开战时出场一次
+	try_auto_spawn_boss()
 	if is_first_wave_started:
 		return
 	## 注入了外部出怪器时，入场延迟与开波时机都由出怪器自己决定（见 ZombieWaveSourceBase）
@@ -192,14 +236,13 @@ func start_game():
 			return
 
 		ConstLevelData.E_MonsterMode.Norm:
-			## 教程关：第一波僵尸由教程管理器按原版时机（种下第一株植物后）启动，这里不自动开波
-			if main_game.is_tutorial_running():
-				Log.debug("新手教程运行中，第一波僵尸交给教程管理器启动")
-				return
 			is_first_wave_started = true
 			## 关卡配置的第一波延迟秒数后开始刷新僵尸
 			await get_tree().create_timer(maxf(0.0, game_para.first_wave_delay)).timeout
-			zombie_wave_manager.start_first_wave()
+			zombie_wave_manager.start_next_wave()
+			## 第一波落定之后才让进度条走起来、把进度条亮出来
+			zombie_wave_manager.every_wave_progress_timer.start()
+			zombie_wave_manager.is_wave_started = true
 
 
 
@@ -371,8 +414,9 @@ func start_next_game_zombie_mananger_update():
 			update_multi_round_zombie_refresh_types(main_game.curr_game_round)
 			zombie_wave_manager.start_next_game_zombie_wave_mananger_update()
 
-	## 我是僵尸模式删除所有的僵尸
+	## 我是僵尸模式删除所有的僵尸（僵王一并清场，不产生击杀或奖杯）
 	if game_para.is_zombie_mode:
+		clear_bosses_for_next_round()
 		for i in range(all_zombies_1d.size()-1,-1,-1):
 			var zombie:Zombie000Base = all_zombies_1d[i]
 			zombie.character_death_disappear()
@@ -436,6 +480,140 @@ func update_multi_round_zombie_refresh_types(curr_round:int) -> void:
 #endregion
 #endregion
 
+#region 僵王
+## 返回本管理器是否仍在树中、未排队删除且所属有效关卡处于正式战斗阶段。
+func is_game_running() -> bool:
+	return is_inside_tree() and not is_queued_for_deletion() \
+		and is_instance_valid(main_game) and not main_game.is_queued_for_deletion() \
+		and main_game.main_game_progress == MainGameManager.E_MainGameProgress.MAIN_GAME
+
+
+#region 僵王转发（业务见 zm_boss_registry.gd）
+## 开战时按关卡配置自动生成一次僵王；卡牌召唤不占用该记录。
+func try_auto_spawn_boss() -> ZB000Base:
+	return boss_registry.try_auto_spawn_boss()
+
+## 自动入口按关卡配置只生成一次；失败返回 null。
+func create_boss() -> ZB000Base:
+	return boss_registry.create_boss()
+
+## 正式战斗、有效根节点及注册表允许时返回 true。
+func can_summon_boss(boss_type: CharacterRegistry.ZombieBossType) -> bool:
+	return boss_registry.can_summon_boss(boss_type)
+
+## 卡牌召唤入口；每次成功返回新实例，失败返回 null。
+func try_create_boss_from_card(boss_type: CharacterRegistry.ZombieBossType) -> ZB000Base:
+	return boss_registry.try_create_boss_from_card(boss_type)
+
+## 登记僵王实例并接入敌方计数；同一实例重复登记只返回 true。
+func register_boss(boss: ZB000Base, boss_type: CharacterRegistry.ZombieBossType, count_as_new: bool = true) -> bool:
+	return boss_registry.register_boss(boss, boss_type, count_as_new)
+
+## 返回按登记顺序排列的存活实例快照。
+func get_living_bosses() -> Array[ZB000Base]:
+	return boss_registry.get_living_bosses()
+
+## 返回存活僵王及累计结算数据，供关卡存档保存。
+func get_save_game_data_bosses() -> Dictionary:
+	return boss_registry.get_save_game_data_bosses()
+
+## 仅暂存僵王存档数据，正式战斗开始时再恢复。
+func load_game_data_bosses(data: Dictionary) -> void:
+	boss_registry.load_game_data_bosses(data)
+
+## 正式战斗开始后一次性恢复存活实例及累计记录，不重复计数。
+func restore_saved_bosses() -> void:
+	boss_registry.restore_saved_bosses()
+
+## 我是僵尸模式轮间清场时一并移除僵王；清场不产生击杀或奖杯。
+func clear_bosses_for_next_round() -> void:
+	boss_registry.clear_bosses_for_next_round()
+#endregion
+## 僵王死亡后沿用普通清场判定：最后一波且场上已无敌人时才生成奖杯。
+func _try_finish_wave(global_pos: Vector2) -> void:
+	if not is_end_wave or curr_zombie_num != 0:
+		return
+	EventBus.push_event("create_trophy", [global_pos])
+	if is_instance_valid(multi_round_end_wave_timer):
+		multi_round_end_wave_timer.stop()
+#endregion
+
+
+#region 技能生成僵尸
+## 判断技能能否将指定类型放入目标行，不依赖普通波次选行器，也不改变计数。
+func can_spawn_skill_zombie(zombie_type: CharacterRegistry.ZombieType, lane: int) -> bool:
+	if lane < 0 or lane >= all_zombie_rows.size() or lane >= all_zombies_2d.size():
+		return false
+	var row: ZombieRow = all_zombie_rows[lane]
+	if not is_instance_valid(row) or not row.is_inside_tree() or row.is_queued_for_deletion() \
+		or not is_instance_valid(row.zombie_create_position):
+		return false
+	if zombie_type == 0 or not Global.character_registry.ZombieInfo.has(zombie_type):
+		return false
+	var scene: PackedScene = Global.character_registry.get_zombie_info(zombie_type, CharacterRegistry.ZombieInfoAttribute.ZombieScenes) as PackedScene
+	if scene == null or not scene.can_instantiate():
+		return false
+	var row_type: CharacterRegistry.ZombieRowType = Global.character_registry.get_zombie_info(zombie_type, CharacterRegistry.ZombieInfoAttribute.ZombieRowType)
+	return row_type == CharacterRegistry.ZombieRowType.Both \
+		or row.zombie_row_type == CharacterRegistry.ZombieRowType.Both or row_type == row.zombie_row_type
+
+
+## 技能生成入口：使用释放点 X 和目标行基准 Y，登记与计数复用普通创建流程。
+func create_skill_zombie(zombie_type: CharacterRegistry.ZombieType, lane: int, spawn_x: float) -> Zombie000Base:
+	if not is_game_running() or not is_finite(spawn_x) or not can_spawn_skill_zombie(zombie_type, lane):
+		return null
+	var row: ZombieRow = all_zombie_rows[lane]
+	var spawn_position := Vector2(spawn_x, row.zombie_create_position.global_position.y)
+	if not spawn_position.is_finite():
+		return null
+	var init_parameters: Dictionary = {
+		Zombie000Base.E_ZInitAttr.CharacterInitType: Character000Base.E_CharacterInitType.IsNorm,
+		Zombie000Base.E_ZInitAttr.Lane: lane,
+		Zombie000Base.E_ZInitAttr.CurrWave: -1,
+		Zombie000Base.E_ZInitAttr.ParticipatesNaturalRefresh: false,
+	}
+	return create_norm_zombie(zombie_type, row, init_parameters, spawn_position)
+
+
+## 创建技能召唤的蹦极僵尸，目标在入树前注入；失败返回 null。
+func create_skill_bungi(target_cell: PlantCell, anchor: Marker2D, on_created: Callable = Callable()) -> Zombie021Bungi:
+	if not is_game_running() or not is_instance_valid(target_cell) \
+		or target_cell.is_queued_for_deletion() or not target_cell.is_inside_tree() \
+		or not main_game.is_ancestor_of(target_cell) or target_cell.get_bungi_target() == null:
+		return null
+	var lane: int = target_cell.row_col.x
+	if not can_spawn_skill_zombie(CharacterRegistry.ZombieType.Z021Bungi, lane):
+		return null
+	var row: ZombieRow = all_zombie_rows[lane]
+	var spawn_position := Vector2(target_cell.global_position.x + target_cell.size.x / 2.0,
+		row.zombie_create_position.global_position.y)
+	if not spawn_position.is_finite():
+		return null
+	var init_parameters: Dictionary = {
+		Zombie000Base.E_ZInitAttr.CharacterInitType: Character000Base.E_CharacterInitType.IsNorm,
+		Zombie000Base.E_ZInitAttr.Lane: lane,
+		Zombie000Base.E_ZInitAttr.CurrWave: -1,
+		Zombie000Base.E_ZInitAttr.ParticipatesNaturalRefresh: false,
+	}
+	return create_norm_zombie(CharacterRegistry.ZombieType.Z021Bungi, row, init_parameters,
+		spawn_position, _initialize_skill_bungi.bind(target_cell, anchor, on_created)) as Zombie021Bungi
+
+
+## [param zombie] 刚实例化且尚未入树的蹦极僵尸；先注入出战参数，再交给调用方登记。[br]
+## 博士已经用进入动画表现召唤，因此这里跳过靶子预警、入树后立即下降。
+## [param anchor] 博士手部绳子挂点；本仓库的蹦极绳子挂在自身节点下，暂时只作预留。
+func _initialize_skill_bungi(zombie: Zombie021Bungi, target_cell: PlantCell, anchor: Marker2D, on_created: Callable) -> void:
+	zombie.plant_cell = target_cell
+	zombie.drop_start_delay = 0.0
+	if is_instance_valid(zombie.bungee_target):
+		zombie.bungee_target.visible = false
+	if is_instance_valid(anchor) and zombie.has_method("set_bungee_anchor"):
+		zombie.set_bungee_anchor(anchor)
+	if on_created.is_valid():
+		on_created.call(zombie)
+#endregion
+
+
 #region 生成关卡前展示僵尸
 func create_prepare_show_zombies():
 	zombie_show_in_start.create_prepare_show_zombies()
@@ -445,7 +623,9 @@ func delete_prepare_show_zombies():
 #endregion
 
 #region 植物调用相关，寒冰菇\火爆辣椒\三叶草
-## 冰冻所有僵尸
+## 冰冻所有僵尸和所有存活僵王；各僵王自行检查受击窗口。[br]
+## [param time_ice] 完全冻结时长，单位为游戏秒。[br]
+## [param time_decelerate] 解冻后的减速时长，单位为游戏秒。
 func ice_all_zombie(time_ice:float, time_decelerate: float):
 	## 冰消珊瑚
 	is_ice = true
@@ -457,6 +637,9 @@ func ice_all_zombie(time_ice:float, time_decelerate: float):
 			if not is_instance_valid(zombie):
 				continue
 			zombie.be_ice_freeze(time_ice, time_decelerate)
+	# 僵王不加入普通僵尸列表，单独遍历登记集合，每只存活僵王只接收一次本次全场冻结。
+	for boss: ZB000Base in get_living_bosses():
+		boss.be_ice_freeze(time_ice, time_decelerate)
 
 func start_ice_timer(wait_time:float):
 	if not is_instance_valid(ice_timer):
@@ -468,7 +651,7 @@ func start_ice_timer(wait_time:float):
 
 func _on_ice_timer_timeout():
 	if not is_ice:
-		push_error("冰消珊瑚计时器有误，is_ice应该为true")
+		Log.error("冰消珊瑚计时器有误，is_ice应该为true")
 	is_ice = false
 
 
@@ -480,13 +663,20 @@ func jalapeno_bomb_item_lane(lane:int):
 		var ice_road:IceRoad = all_ice_roads[lane][i]
 		ice_road.ice_road_disappear()
 
-## 火爆辣椒爆炸整行僵尸
+## 火爆辣椒处理整行普通僵尸，并攻击所有存活僵王；僵王检查受击窗口，不限制行号。[br]
+## [param lane] 辣椒所在的零起始行号，仅用于选择受影响的普通僵尸。
 func jalapeno_bomb_lane_zombie(lane:int):
-	#Log.debug(all_zombies_2d[lane])
+	# 倒序遍历当前行，普通僵尸被炸死时可能立即从列表移除。
 	for i in range(all_zombies_2d[lane].size()-1,-1,-1) :
 		if is_instance_valid(all_zombies_2d[lane][i]):
+			## 当前接受爆炸伤害的普通僵尸，继续沿用其原有灰烬与删除规则。
 			var zombie:Zombie000Base = all_zombies_2d[lane][i]
 			zombie.be_bomb(1800, true)
+	# 任意行的辣椒都可命中僵王，使用专用入口检查受击窗口并保留完整死亡演出。
+	# 使用快照，某只僵王死亡不会影响其余实例遍历。
+	for boss: ZB000Base in get_living_bosses():
+		if is_instance_valid(boss):
+			boss.be_jalapeno(1800)
 
 ## 三叶草吹走空中僵尸
 func blover_blow_away_in_sky_zombie():

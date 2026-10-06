@@ -55,7 +55,7 @@ func register_level_init_callback(callback: Callable) -> void:
 	level_init_callbacks.append(callback)
 
 ## 创建主游戏自己的子管理器
-## 与 TutorialManager / DaveSellManager 同一套路：运行时 new() 出来挂到 Manager 节点下
+## 与 DaveSellManager 同一套路：运行时 new() 出来挂到 Manager 节点下
 ## （这些在场景里没有对应节点，见 MainGameSubManager._get_main_game 的 Global.main_game 兜底）
 ## 必须在任何存档逻辑之前建好：不支持续玩的多轮关卡一进关就要 re_main_game()
 func init_main_game_sub_managers() -> void:
@@ -71,98 +71,28 @@ func init_main_game_sub_managers() -> void:
 
 #endregion
 
-#region 新手教程
-## 教程管理器：本关有教程（关卡字段 tutorial_data，或关卡脚本覆写 has_tutorial()）
-## 且为首次游玩时才创建（原版冒险模式 1-1）
-var tutorial_manager: TutorialManager
-
-## 创建教程管理器（在 init_manager() 之后调用，教程要用到卡槽 / 植物格子）
-## tutorial_data_override：教程在 run_flow() 里现场构造时由教程事件传进来
-## （见 LevelTimelineEventTutorial.run → setup_tutorial_manager）
-func init_tutorial_manager(tutorial_data_override: ResourceTutorialData = null) -> void:
-	var data := tutorial_data_override
-	if data == null:
-		data = game_para.get_tutorial_data()
-	## 教程在 run_flow() 里现场构造时，这时还拿不到数据（关卡脚本覆写了 has_tutorial()）
-	if data == null and not game_para.has_tutorial():
-		return
-	## 播不播由关卡脚本说了算：默认「教程只播一次 + 本关已通关过就跳过」，
-	## 关卡脚本覆写 should_run_tutorial() 就能改（见 LevelScriptBase）
-	if game_para is LevelScriptBase and not (game_para as LevelScriptBase).should_run_tutorial(self):
-		Log.debug("关卡脚本决定跳过新手教程")
-		return
-	## 老 .tres 关卡没有脚本：沿用原来的规则
-	if not (game_para is LevelScriptBase) and data != null \
-			and data.only_first_playthrough and is_curr_level_success():
-		Log.debug("本关已通关，跳过新手教程")
-		return
-	tutorial_manager = TutorialManager.new()
-	tutorial_manager.name = "TutorialManager"
-	manager.add_child(tutorial_manager)
-	if data != null:
-		tutorial_manager.set_tutorial_data(data)
-
-
-## 把「流程里现场构造」的教程数据交给教程管理器；管理器还没建就现建
-## （见 LevelTimelineEventTutorial.run：数据在 run_flow() 里才造出来，晚于 init_tutorial_manager）
-func setup_tutorial_manager(data: ResourceTutorialData) -> void:
-	if data == null:
-		return
-	if tutorial_manager == null:
-		init_tutorial_manager(data)
-		return
-	if tutorial_manager.tutorial_data == null:
-		tutorial_manager.set_tutorial_data(data)
-
-
-## 拿本关的教程管理器，并确保它处于**逐步模式**（没有就现建）
-##
-## 逐步模式 = 教程不再由 tutorial_data.steps 自驱跑，而是由关卡流程里的
-## `await prefab.advice(...)` / `await prefab.wait_plant(...)` 这些事件一次做一件事地推进。
-## 谁在用它：LevelTimelineEventTutorial* 系列事件（见 LevelPrefabs 的教程系列）。
-## 幂等：第一次调用时进入逐步模式，后续调用直接返回同一个管理器。
-func ensure_tutorial_stepped_mode() -> TutorialManager:
-	if tutorial_manager == null:
-		init_tutorial_manager()
-	if tutorial_manager == null:
-		Log.error("MainGameManager: 本关没有教程管理器，教程事件无法执行")
-		return null
-	if not tutorial_manager.is_running:
-		tutorial_manager.begin_stepped_mode()
-	return tutorial_manager
-
-
-## 本关是否已有通关记录（教程「只播一次」判定用）
+#region 关卡进度判定
+## 本关是否已有通关记录（「只给第一次进本关的玩家看」的东西都查它，见 LevelScriptBase.is_curr_level_success）
 func is_curr_level_success() -> bool:
-	var curr_level_state_data: Dictionary = Global.global_game_state.curr_all_level_state_data.get(
-		game_para.save_game_name, {}
-	)
-	return curr_level_state_data.get("IsSuccess", false)
+	return Global.global_game_state.is_level_success(game_para.save_game_name)
 
 
-## 教程是否正在运行：ZombieManager 靠它决定要不要自己启动第一波僵尸
-func is_tutorial_running() -> bool:
-	return tutorial_manager != null and tutorial_manager.is_running
-
-
-## 当前玩家是否可以操作草坪与主界面手持物：主游戏阶段，或「开场教程」正在跑
-## （原版 1-5 的铲子教学发生在关卡开局之前，此时也要能用铲子，见 HandComponentShovel）
+## 当前玩家是否可以操作草坪与主界面手持物（卡片 / 铲子 / 手套）
+##
+## **只看主游戏阶段**：教学演出也是关卡流程的一部分，
+## 要让玩家先动手就用「允许操作」事件把阶段推到 MAIN_GAME（见 LevelTimelineEventAllowOperation），
+## 本体不认识「教程」这种东西（硬约束 §1-8）。
 func is_lawn_playable() -> bool:
-	if main_game_progress == E_MainGameProgress.MAIN_GAME:
-		return true
-	return tutorial_manager != null and tutorial_manager.is_running \
-		and tutorial_manager.is_opening_tutorial()
+	return main_game_progress == E_MainGameProgress.MAIN_GAME
 
 
 ## 关卡开场戴夫对话是否跳过（时间轴的 DaveDialog 事件也走这里）
+## 本轮根本没有对话时事件自己就先返回了（见 LevelTimelineEventDaveDialog.run），这里只管「有对话要不该播」
+##
+## **教学演出里的戴夫对话不归这里管**：那是关卡流程自己写的（`await dave_dialog(对话)`），
+## 「只播一次」由关卡脚本自己判（`if not is_curr_level_success()`），见 adventure_01_05。
 func is_skip_level_dave_dialog() -> bool:
-	if not game_para.has_dave_dialog():
-		return false
-	## 教程关：戴夫对话是教程的一部分（原版 1-5：戴夫教玩家用铲子，只在第一轮出现），
-	## 教程因「已通关过」被跳过时（tutorial_manager 没有创建），开场对话也一起跳过
-	if game_para.has_tutorial():
-		return tutorial_manager == null
-	## 非教程关：关卡资源显式声明「只播一次」时，本关已经有通关记录就不再播
+	## 关卡资源显式声明「只播一次」时，本关已经有通关记录就不再播
 	## （原版：进入夜晚场景 2-1 的这段开场白只在第一次进夜晚时说）
 	if game_para.dave_dialog_only_first_playthrough and is_curr_level_success():
 		Log.debug("本关已通关，跳过开场戴夫对话")
@@ -193,9 +123,8 @@ func init_dave_sell_manager() -> void:
 	manager.add_child(dave_sell_manager)
 
 
-## 播一次戴夫对话并等他离场：关卡开场对话（run_flow() 里传给 prefab.dave_dialog 的那段，
-## 或老关卡的 ResourceLevelData.crazy_dave_dialog）与教程中途对话
-## （ResourceTutorialStep.dave_dialog）都走这里
+## 播一次戴夫对话并等他离场：关卡开场对话（run_flow() 里传给 dave_dialog 的那段，
+## 或老关卡的 ResourceLevelData.crazy_dave_dialog）与教学中途对话（关卡流程自己写的那段）都走这里
 ## 戴夫挂在界面层，对话期间游戏照常运行
 func play_crazy_dave_dialog(dialog_resource: CrazyDaveDialogResource) -> void:
 	if dialog_resource == null:
@@ -211,7 +140,7 @@ func play_crazy_dave_dialog(dialog_resource: CrazyDaveDialogResource) -> void:
 ## 关卡时间轴管理器：关卡流程按时间轴走，一个事件结束才开下一个（见 LevelTimelineManager）
 var level_timeline_manager: LevelTimelineManager
 
-## 创建时间轴管理器（在 init_tutorial_manager() 之后：时间轴要能等到开场教程跑完）
+## 创建时间轴管理器（在 init_manager() 之后：关卡流程要用它初始化的那些子管理器）
 func init_level_timeline_manager() -> void:
 	level_timeline_manager = LevelTimelineManager.new()
 	level_timeline_manager.name = "LevelTimelineManager"
@@ -244,6 +173,11 @@ func _on_first_coin_drop(coin: Coin) -> void:
 @onready var camera_2d: MainGameCamera = %Camera2D
 @onready var ui_remind_word: UIRemindWord = %UIRemindWord
 @onready var level_info: LevelInfo = $CanvasLayerUI/LevelInfo
+## 关卡进度条控制器：进关时给它装一个数据源（默认战斗进度，僵王关是僵王血量），
+## 之后进度条由它自己每帧驱动，出怪侧与关卡都不再直接碰进度条节点
+@onready var level_progress_controller: LevelProgressBarController = %LevelProgressBarController
+## 关卡道具容器：僵王的冰火球、地面轨迹等一次性道具挂在这里，不跟随僵王自身变换
+@onready var items: Node2D = %Items
 
 #endregion
 
@@ -335,10 +269,8 @@ var p_yeti_run :float= -1
 @export_group("本局游戏参数")
 ## 正常进入游戏会自动更新对应关卡数据,直接进入该场景会使用该关卡数据,并设置is_test=true
 @export var game_para : ResourceLevelData
-## 僵王博士（不是僵尸角色，是独立 Node2D，见 ZombossBoss）
-## 哪一关有僵王 / 什么时候登场，全由关卡流程的「生成僵王」事件决定（见 LevelTimelineEventSpawnZomboss），
-## 本管理器只留这个引用给关卡侧与索敌组件用，不认识任何僵王关的玩法分支
-var zomboss_boss: ZombossBoss
+## 僵王博士是正式角色：出场与登记全在 ZombieManager（见 zombie_manager.gd 的僵王区），
+## 本管理器不认识任何僵王关的玩法分支，关卡只通过 LevelData 的 boss_* 字段声明
 ## 若为true,选卡无冷却
 var is_test := false
 ## 当前轮次
@@ -364,7 +296,7 @@ func set_game_para() -> void:
 	else:
 		is_test = true
 	if game_para == null:
-		push_error(
+		Log.error(
 			"主游戏缺少关卡数据 ResourceLevelData：请从选关流程进入，或在编辑器中为该主游戏场景根节点指定「本局游戏参数 / game_para」。"
 		)
 		queue_free()
@@ -404,9 +336,7 @@ func _ready() -> void:
 	signal_connect()
 	## 初始化子管理器
 	init_manager()
-	## 教程管理器依赖卡槽与植物格子，必须在 init_manager() 之后创建
-	init_tutorial_manager()
-	## 时间轴管理器在教程管理器之后：时间轴要能等到开场教程跑完
+	## 时间轴管理器在子管理器之后：关卡流程要用卡槽 / 植物格子 / 僵尸管理器
 	init_level_timeline_manager()
 	coin_bank_label.visible = false
 	## 初始化游戏背景音乐
@@ -459,6 +389,8 @@ func init_manager():
 	game_item_manager.init_manager()
 	hand_manager.init_manager()
 	zombie_manager.init_manager()
+	## 进度条排在波次管理器之后：波数这时候才定下来，进度条上画几面旗要读它
+	level_progress_controller.setup(self)
 	drop_item_manager.init_manager()
 	day_suns_manager.init_manager()
 	## 主游戏自己的子管理器：在这里订阅事件总线（见各自的 init_manager）
@@ -733,16 +665,15 @@ func main_game_start():
 
 	## 主游戏进程阶段
 	main_game_progress = E_MainGameProgress.MAIN_GAME
-	card_manager.card_slot_update_main_game()
+	await card_manager.card_slot_update_main_game()
+	## 传送带随开战一起启动：1-5 这类关卡的教学排在开战之前，
+	## 「允许操作」事件（见 allow_lawn_operation）不该顺手把传送带放出来
+	await card_manager.start_conveyor_belt()
 
 	## 开战一秒后切换主游戏bgm
 	await get_tree().create_timer(1.0).timeout
 	SoundManager.play_bgm(bgm_main_game)
 
-	## 教程关：教程流程接管第一波僵尸的启动时机（原版：种下第一株植物后才出僵尸）
-	## 逐步模式的教程（1-1）在「允许操作」事件里早已由关卡流程自己走完，这里不开跑
-	if tutorial_manager != null and tutorial_manager.has_steps():
-		tutorial_manager.start_tutorial()
 	zombie_manager.start_game()
 
 

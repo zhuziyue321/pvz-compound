@@ -7,10 +7,8 @@ class_name CardSlotSeedRain
 ## 卡片范围
 @export var card_area_x_range:Vector2 = Vector2(100,700)
 @export var card_area_y_range:Vector2 = Vector2(100,500)
-## 按顺序出现的卡片植物
-@export var card_order_plant:Dictionary[int, CharacterRegistry.PlantType] = {}
-## 按顺序出现的卡片僵尸(若重复,则使用植物的卡片)
-@export var card_order_zombie:Dictionary[int, CharacterRegistry.ZombieType] = {}
+## 按顺序出现的卡片身份;键为生成序号,未指定的序号走随机池
+@export var seed_rain_order:Dictionary[int, ResourceCardReference] = {}
 ## 创建卡片的时间
 @export var card_create_cd_range:Vector2 = Vector2(3,5)
 ## 卡片正常存在时间,存在时间结束后闪烁5秒后消失
@@ -20,38 +18,25 @@ var all_num_card :int = 0
 
 ## 管理器初始化调用
 func init_card_slot_seed_rain(game_para:ResourceLevelData):
-	var card_random_pool_init_para = {
-		CardRandomPool.E_CardRandomPoolInitParaAttr.AllCardPlantProbability: game_para.all_card_plant_type_probability_seed_rain,
-		CardRandomPool.E_CardRandomPoolInitParaAttr.AllCardZombieProbability: game_para.all_card_zombie_type_probability_seed_rain,
-	}
 	Log.debug("种子雨卡槽初始化随机卡片生成器")
-	card_random_pool.init_card_random_pool(card_random_pool_init_para)
+	card_random_pool.init_card_random_pool(game_para.seed_rain_weights)
 
-	self.card_order_plant = game_para.card_order_plant_seed_rain
-	self.card_order_zombie = game_para.card_order_zombie_seed_rain
+	self.seed_rain_order = game_para.seed_rain_order
 
 func _on_create_new_card_timer_timeout() -> void:
 	_create_new_card()
 	create_new_card_timer.start(randf_range(card_create_cd_range.x, card_create_cd_range.y))
 
-enum E_TempCardParaAttr{
-	PlantType,
-	ZombieType,
-	GlobalPos,
-	ExistTime,	## 存在时间，若没有，则永久存在
-}
 ## 生成一张新卡片
 func _create_new_card():
+	var card_reference: ResourceCardReference = seed_rain_order.get(all_num_card, null)
+	if card_reference == null:
+		card_reference = card_random_pool.get_random_reference()
+	if card_reference == null:
+		Log.error("种子雨卡槽：第 %d 张卡片没有可用身份，本次生成已跳过" % all_num_card)
+		return
 	var temp_card_para:Dictionary = {}
-	if card_order_plant.has(all_num_card):
-		temp_card_para[CardManager.E_TempCardParaAttr.PlantType] = card_order_plant[all_num_card]
-	elif card_order_zombie.has(all_num_card):
-		temp_card_para[CardManager.E_TempCardParaAttr.ZombieType] = card_order_zombie[all_num_card]
-	else:
-		var card_random_info = card_random_pool.get_random_card_info()
-		temp_card_para[CardManager.E_TempCardParaAttr.PlantType] = card_random_info["plant_type"]
-		temp_card_para[CardManager.E_TempCardParaAttr.ZombieType] = card_random_info["zombie_type"]
-
+	temp_card_para[CardManager.E_TempCardParaAttr.CardReference] = card_reference
 	temp_card_para[CardManager.E_TempCardParaAttr.GlobalPos] = Vector2(randf_range(card_area_x_range.x, card_area_x_range.y),randf_range(card_area_y_range.x, card_area_y_range.y))
 	temp_card_para[CardManager.E_TempCardParaAttr.ExistTime] = card_exist_time_norm
 	var new_card = Global.main_game.card_manager.create_temp_card(temp_card_para)

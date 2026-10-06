@@ -21,6 +21,29 @@ var card_candidate_container:CardCandidateContainer
 ## 模仿者材质
 const IMITATER = preload("res://shaders/materials/imitater.tres")
 
+## 卡片点击用途,由创建方在入树前指定
+enum CardContext {
+	Catalog,	## 源目录用途,不处理点击
+	Selection,	## 选卡或取消选择
+	Battle,		## 出战卡槽,交给手持管理器
+	Almanac,	## 图鉴,点击打开详情
+	Custom,		## 关卡自定义种子包,点击交给 custom_click 回调
+}
+## 当前点击用途;默认 Catalog
+var card_context: CardContext = CardContext.Catalog
+
+## 关卡自定义种子包的点击回调（仅 CardContext.Custom 生效，
+## 由 LevelScriptBase.create_custom_seed_packet() 写入）。
+## 回调收到本卡自己（card:Card）：扣不扣阳光、冷不冷却、要不要置灰都由回调决定，
+## 本体不认识任何具体玩法（硬约束 §1-8），只负责「点到就把这张卡交给回调」。
+var custom_click: Callable
+## 是否已永久停用（一次性卡「买过一次」这类）：置灰且不再响应点击。
+## 与冷却的区别是阳光变化 / 新一轮刷新都不会把它重新点亮（见 judge_card_ready）。
+var is_disabled_forever := false
+## 是否被关卡脚本封住（比如「现在没有弹坑可填」这类**条件不满足**）：
+## 与 is_disabled_forever 的区别是它**可以解开**，见 set_card_blocked()
+var is_blocked := false
+
 ## 点击信号,选卡时使用该信号(种植点击使用时间总线)
 signal signal_card_click(card:Card)
 ## 卡片种植完成后信号，生成卡片所在卡槽连接该信号
@@ -38,6 +61,7 @@ func _ready() -> void:
 ## 设置卡片为图鉴卡片
 func set_almanac_card():
 	is_almanac_card = true
+	card_context = CardContext.Almanac
 
 ## 改变卡片的冷却时间（测试时使用）
 func card_change_cool_time(new_cool_time:float):
@@ -82,6 +106,14 @@ func judge_sun_enough(curr_sun_value):
 
 ## 判断卡片是否可以点击
 func judge_card_ready():
+	## 永久停用的卡（一次性卡买过一次）永远点不动
+	if is_disabled_forever:
+		card_not_can_click()
+		return
+	## 被关卡脚本封住的卡：条件还没满足（比如没有弹坑可填），等 set_card_blocked(false) 解开
+	if is_blocked:
+		card_not_can_click()
+		return
 	# 阳光充足 且 卡片冷却完成
 	if is_sun_enough and not _is_cooling:
 		## 紫卡并且不能种植
@@ -107,6 +139,22 @@ func card_not_can_click():
 	_cool_mask.visible = true
 	is_can_click = false
 
+## 永久停用本卡（一次性种子包买过一次就置灰）：
+## 与 set_card_disable() 的区别是阳光变化 / 新一轮刷新都不会把它重新点亮
+func set_card_disabled_forever() -> void:
+	is_disabled_forever = true
+	## 冷却遮罩拉满（画满 = 整张卡压暗）；本卡 cool_time 可能是 0，那时遮罩的 max 也是 0，
+	## 画出来是空的、看着还像能点，这里按至少 1 秒算满
+	_cool_mask.max_value = maxf(cool_time, 1.0)
+	_cool_mask.value = _cool_mask.max_value
+	card_not_can_click()
+
+## 封住 / 解开本卡（关卡脚本说「现在条件不满足」时用，比如盘面上没有弹坑可填）：
+## 与 set_card_disable() 的区别是**冲不掉** —— 阳光变化走 judge_card_ready() 时会单独判这一道
+func set_card_blocked(blocked: bool) -> void:
+	is_blocked = blocked
+	judge_card_ready()
+
 ## 卡片开始冷却
 func card_cool():
 	_is_cooling = true
@@ -123,7 +171,20 @@ func _on_button_pressed() -> void:
 		return
 
 	## 如果时主游戏场景,并且游戏中
-	if is_instance_valid(Global.main_game) and Global.main_game.main_game_progress == MainGameManager.E_MainGameProgress.MAIN_GAME:
+	var is_main_game: bool = is_instance_valid(Global.main_game) \
+		and Global.main_game.main_game_progress == MainGameManager.E_MainGameProgress.MAIN_GAME
+	## 关卡自定义种子包：不交给手持管理器，点击行为由关卡脚本给的回调决定（本体不做玩法判断）
+	if card_context == CardContext.Custom:
+		if not is_main_game:
+			return
+		if not is_can_click:
+			SoundManager.play_other_SFX("buzzer")
+			return
+		if custom_click.is_valid():
+			custom_click.call(self)
+		return
+
+	if is_main_game:
 		## 可以点击
 		if is_can_click:
 			EventBus.push_event("main_game_click_card", [self])

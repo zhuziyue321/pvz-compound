@@ -6,21 +6,12 @@ extends LevelScriptBase
 
 
 func _init() -> void:
-	var pre_plant_in_level_0 := PrePlantResource.new()
-	pre_plant_in_level_0.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_0.plant_cell_pos = Vector2i(0, 1)
-	pre_plant_in_level_0.is_imitater_plant = true
-	var pre_plant_in_level_1 := PrePlantResource.new()
-	pre_plant_in_level_1.plant_type = CharacterRegistry.PlantType.P034FlowerPot
-	pre_plant_in_level_1.plant_cell_pos = Vector2i(0, 2)
-
 	game_sences = MainSceneRegistry.MainScenes.MainGameRoof
 	game_BG = ConstLevelData.GameBg.Roof
 	game_BGM = ConstLevelData.GameBGM.Roof
-	all_pre_plant_data.assign([pre_plant_in_level_0, pre_plant_in_level_1])
 	is_bungi = true
 	start_sun = 50000
-	all_card_plant_type_probability.assign({
+	conveyor_weights = ResourceCardWeight.create_plant_weights({
 	3: 1,
 	7: 1,
 	18: 1,
@@ -30,7 +21,7 @@ func _init() -> void:
 	35: 1,
 	40: 1
 	})
-	card_order_plant.assign({
+	conveyor_order = ResourceCardReference.create_plant_order({
 	0: 5,
 	1: 24,
 	2: 40,
@@ -42,6 +33,10 @@ func _init() -> void:
 
 
 func run_flow(_mg: MainGameManager) -> void:
+	## 本关是屋顶测试关：第 1 列走模仿者材质（灰花盆），顺手验「系统种植」的模仿者分支
+	var pots := SystemPlantResource.create_flower_pot_columns(2)
+	pots[0].is_imitater_plant = true
+	await system_plant(pots)
 	## 出怪表：本关多处要用同一份，抽成变量避免重复写
 	var zombie_list: Array[CharacterRegistry.ZombieType] = [
 		CharacterRegistry.ZombieType.Z007ScreenDoor,
@@ -57,12 +52,12 @@ func run_flow(_mg: MainGameManager) -> void:
 	]
 
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
+	await choose_card()
 	## 准备安放植物
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	await ready_set_plant()
 	## 开战
-	await prefab.start_battle(-1, zombie_list)
+	await start_battle(-1, zombie_list)

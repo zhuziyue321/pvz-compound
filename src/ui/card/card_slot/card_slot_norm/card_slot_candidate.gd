@@ -11,6 +11,8 @@ class_name CardSlotCandidate
 ## 所有的备选卡片
 var all_card_candidate_containers_plant:Dictionary[int, CardCandidateContainer] = {}
 var all_card_candidate_containers_zombie:Dictionary[int, CardCandidateContainer] = {}
+## 僵王备选卡片；索引空间与僵尸页独立,追加在僵尸页之后
+var all_card_candidate_containers_boss:Dictionary[int, CardCandidateContainer] = {}
 
 ## 所有的卡片页面列表
 var all_card_page_array:Array[GridContainer] =[]
@@ -49,6 +51,7 @@ func _ready() -> void:
 	## 场景里的模板 GridContainerZombie 默认 visible=false，不生成页就不会露出空白页。
 	if ConstFeatureSwitch.ZOMBIE_CARD_ENABLED:
 		_init_card_slot_candidate_zombie()
+		_init_card_slot_candidate_boss()
 	_init_card_slot_candidate_imitater()
 
 	_init_card_page()
@@ -110,6 +113,8 @@ func _init_card_slot_candidate_plant():
 		#var curr_plant_card = AllCards.all_plant_card_prefabs[Global.global_game_state.curr_plant[i]]
 		var curr_plant_card = AllCards.all_plant_card_prefabs[AllCards.all_plant_card_prefabs.keys()[i]]
 		var new_card = curr_plant_card.duplicate()
+		## 副本默认与源卡共享身份资源,先换成独立引用
+		new_card.make_reference_unique()
 		var card_candidate_container: CardCandidateContainer = SceneRegistry.CARD_CANDIDATE_CONTAINER.instantiate()
 
 		card_candidate_container.init_card_in_seed_chooser(new_card)
@@ -151,6 +156,7 @@ func _init_card_slot_candidate_zombie():
 		#var curr_zombie_card = AllCards.all_zombie_card_prefabs[Global.global_game_state.curr_zombie[i]]
 		var curr_zombie_card = AllCards.all_zombie_card_prefabs[AllCards.all_zombie_card_prefabs.keys()[i]]
 		var new_card = curr_zombie_card.duplicate()
+		new_card.make_reference_unique()
 		var card_candidate_container: CardCandidateContainer = SceneRegistry.CARD_CANDIDATE_CONTAINER.instantiate()
 
 		card_candidate_container.init_card_in_seed_chooser(new_card)
@@ -166,6 +172,45 @@ func _init_card_slot_candidate_zombie():
 		all_card_candidate_containers_zombie[AllCards.zombie_card_ids[zombie_type]].visible = true
 
 	grid_container_zombie.queue_free()
+
+## 初始化生成僵王待选卡槽;整页追加在僵尸页之后,沿用僵尸页的网格模板。
+## 僵王编号与僵尸编号是两个独立的下标空间,因此用单独的字典保存容器。
+func _init_card_slot_candidate_boss():
+	if AllCards.all_boss_card_prefabs.is_empty():
+		return
+	## 每一页的卡片数量
+	var num_card_every_page = grid_container_zombie.get_child_count()
+	## 当前页面的所有卡片占位
+	var all_card_selected_placeholder:Array
+	var curr_num_page:int = -1
+	var page_index := 0
+	for boss_type:CharacterRegistry.ZombieBossType in AllCards.boss_card_ids:
+		var page_i:int = int(float(page_index) / num_card_every_page)
+		page_index += 1
+		if curr_num_page < page_i:
+			curr_num_page += 1
+			var new_grid_container = grid_container_zombie.duplicate()
+			all_card_page.add_child(new_grid_container)
+			all_card_page_array.append(new_grid_container)
+			new_grid_container.visible = false
+			## 当前页面的所有卡片占位
+			all_card_selected_placeholder = new_grid_container.get_children()
+		var curr_boss_card = AllCards.all_boss_card_prefabs[boss_type]
+		var new_card = curr_boss_card.duplicate()
+		new_card.make_reference_unique()
+		var card_candidate_container: CardCandidateContainer = SceneRegistry.CARD_CANDIDATE_CONTAINER.instantiate()
+
+		card_candidate_container.init_card_in_seed_chooser(new_card)
+		all_card_selected_placeholder[curr_boss_card.card_id % num_card_every_page].add_child(card_candidate_container)
+		all_card_candidate_containers_boss[curr_boss_card.card_id] = card_candidate_container
+
+		card_candidate_container.visible = false
+
+	for boss_type:CharacterRegistry.ZombieBossType in Global.global_game_state.curr_zombie_boss:
+		## 没有卡位的僵王直接跳过
+		if not AllCards.boss_card_ids.has(boss_type):
+			continue
+		all_card_candidate_containers_boss[AllCards.boss_card_ids[boss_type]].visible = true
 
 ## 初始化生成模仿者待选卡槽
 func _init_card_slot_candidate_imitater():
@@ -190,6 +235,8 @@ func _init_card_slot_candidate_imitater():
 		#var curr_plant_card = AllCards.all_plant_card_prefabs[Global.global_game_state.curr_plant[i]]
 		var curr_plant_card = AllCards.all_plant_card_prefabs[AllCards.all_plant_card_prefabs.keys()[i]]
 		var new_card = curr_plant_card.duplicate()
+		## 必须先换成独立引用,否则 is_imitater 会写到源卡的共享引用上
+		new_card.make_reference_unique()
 		new_card.is_imitater = true
 		var card_candidate_container: CardCandidateContainer = SceneRegistry.CARD_CANDIDATE_CONTAINER.instantiate()
 

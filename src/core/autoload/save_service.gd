@@ -52,7 +52,7 @@ func save_now() -> void:
 		return
 
 	if global_game_state == null:
-		push_error("❌ 全局存档失败：GlobalGameState 未就绪")
+		Log.error("❌ 全局存档失败：GlobalGameState 未就绪")
 		return
 
 	var data: Dictionary = {
@@ -103,7 +103,7 @@ func load_global_game_data() -> void:
 	## JSON 读回来的数字都是 float:转回 int,免得花园工具记录越存越"浮点"
 	state.normalize_garden_data_numbers()
 	state.curr_all_level_state_data = data.get("curr_all_level_state_data", state.DEFAULT_CURR_ALL_LEVEL_STATE_DATA).duplicate(true)
-	state.selected_cards = data.get("selected_cards", [])
+	state.selected_cards = _normalize_selected_cards(data.get("selected_cards", []))
 	## 已解锁植物: 存档里的解锁记录 + 按已通关冒险关卡重新推导(兼容旧档与手动改档),取并集
 	state.curr_plant = _build_curr_plant(data, state)
 
@@ -112,6 +112,40 @@ func load_global_game_data() -> void:
 	for zombie_type in loaded_curr_zombie_raw:
 		loaded_curr_zombie.append(int(zombie_type) as CharacterRegistry.ZombieType)
 	state.curr_zombie = loaded_curr_zombie
+
+
+## 上次选卡结果做归一化:
+## 与 curr_zombie / curr_plant 同一个坑 —— JSON 读回来的枚举是 float,
+## 下游 AllCards.plant_card_ids[plant_type] 这类按枚举取值的写法会因此对不上。
+## 当前格式是 Dictionary({card_type, content_id, is_imitater})（见 ResourceCardReference.to_dict）；
+## 旧档的 {plant_type / zombie_type / is_imitater} 在这里就地升级成新格式,避免玩家重新选卡。
+func _normalize_selected_cards(raw: Variant) -> Array:
+	var result: Array = []
+	if not raw is Array:
+		return result
+	for item in raw:
+		if not item is Dictionary:
+			continue
+		var card_data: Dictionary = (item as Dictionary).duplicate()
+		# 已经是新格式：只需把 JSON 的 float 转回 int,并确认模仿修饰是布尔值。
+		if card_data.has("card_type") and card_data.has("content_id"):
+			card_data["card_type"] = int(card_data["card_type"])
+			card_data["content_id"] = int(card_data["content_id"])
+			card_data["is_imitater"] = bool(card_data.get("is_imitater", false))
+			result.append(card_data)
+			continue
+		# 旧格式：植物条目
+		if card_data.has("plant_type"):
+			result.append({"card_type": ResourceCardReference.CardType.Plant,
+				"content_id": int(card_data["plant_type"]),
+				"is_imitater": bool(card_data.get("is_imitater", false))})
+			continue
+		# 旧格式：普通僵尸条目
+		if card_data.has("zombie_type"):
+			result.append({"card_type": ResourceCardReference.CardType.Zombie,
+				"content_id": int(card_data["zombie_type"]),
+				"is_imitater": false})
+	return result
 
 
 ## 构建已解锁植物列表:
@@ -144,19 +178,18 @@ func _build_curr_plant(data: Dictionary, state: GlobalGameState) -> Array[Charac
 	return result
 
 
+## 保存上次选卡结果
+##
+## 为什么不走「读档 → 改 selected_cards 一个键 → 写回」：
+## `_load_json` 在文件损坏 / JSON 解析失败时返回 `{}`，那样写回的字典**只剩 selected_cards 一个键**，
+## 金币 / 关卡进度 / 花园 / 已解锁植物会被整体抹掉（一次损坏 → 整档丢失）。
+## 直接写全量：`save_now()` 的字段表里已经包含 selected_cards。
 func save_selected_cards() -> void:
-	var path := _get_save_game_path()
-	if path.is_empty():
-		Log.debug("选卡存档跳过：未登录用户或用户名为空")
-		return
-	if global_game_state == null:
-		push_error("❌ 选卡存档失败：GlobalGameState 未就绪")
-		return
-	var data := _load_json(path)
-	data["selected_cards"] = global_game_state.selected_cards
-	if not _save_json(data, path):
-		return
+	save_now()
 
+## 读上次选卡结果（「重选上次卡片」按钮走这条）
+## 注意：读档路径有两条（本函数与 load_global_game_data），**两条都要过 _normalize_selected_cards**，
+## 否则 JSON 的 float 枚举会漏到下游的 AllCards.plant_card_ids[plant_type]
 func load_selected_cards() -> void:
 	var path := _get_save_game_path()
 	if path.is_empty():
@@ -164,18 +197,41 @@ func load_selected_cards() -> void:
 	if global_game_state == null:
 		return
 	var data := _load_json(path)
-	global_game_state.selected_cards = data.get("selected_cards", [])
+	global_game_state.selected_cards = _normalize_selected_cards(data.get("selected_cards", []))
 
+## 写存档：先写 .tmp，再原子替换，全程留一份 .bak 兜底
+##
+## 为什么不直接 `FileAccess.open(path, WRITE)` 覆盖：
+## 写入中途崩溃 / 断电会留下**截断的坏档**，下次 `_load_json` 解析失败返回 `{}`，
+## 任何「读档 → 改键 → 写回」的调用都会把残档固化 —— 这是丢档链的第一环。
 func _save_json(data: Dictionary, path: String) -> bool:
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	var tmp_path := path + ".tmp"
+	var file := FileAccess.open(tmp_path, FileAccess.WRITE)
 	if file == null:
-		var err := FileAccess.get_open_error()
-		push_error("❌ 存档写入失败：无法打开文件 %s（错误码 %d）" % [path, err])
+		var open_err := FileAccess.get_open_error()
+		Log.error("❌ 存档写入失败：无法打开临时文件 %s（错误码 %d）" % [tmp_path, open_err])
 		return false
 
-	var json_text := JSON.stringify(data, "\t") # 可读性更强
-	file.store_string(json_text)
+	file.store_string(JSON.stringify(data, "\t")) # 可读性更强
 	file.close()
+
+	## user:// 是虚拟路径，rename 前要转成系统绝对路径
+	var abs_path := ProjectSettings.globalize_path(path)
+	var abs_tmp := ProjectSettings.globalize_path(tmp_path)
+	var abs_bak := abs_path + ".bak"
+
+	## Windows 的 rename 不允许覆盖已存在的文件：先把上一份好档挪成 .bak
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(abs_bak)
+		DirAccess.rename_absolute(abs_path, abs_bak)
+
+	if DirAccess.rename_absolute(abs_tmp, abs_path) != OK:
+		Log.error("❌ 存档写入失败：临时文件替换失败 %s" % path)
+		## 兜底：把 .bak 还原回去，别让玩家连上一份好档都没了
+		if not FileAccess.file_exists(path) and FileAccess.file_exists(abs_bak):
+			DirAccess.rename_absolute(abs_bak, abs_path)
+		DirAccess.remove_absolute(abs_tmp)
+		return false
 	return true
 
 func _load_json(path: String) -> Dictionary:
@@ -183,10 +239,13 @@ func _load_json(path: String) -> Dictionary:
 		return {}
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
+		Log.error("❌ 存档读取失败：无法打开文件 %s" % path)
 		return {}
 	var json_text := file.get_as_text()
 	file.close()
 	var result: Dictionary = JSON.parse_string(json_text) as Dictionary
 	if result == null:
+		## 解析失败必须出声：静默返回 {} 会让调用方把整档写成残档
+		Log.error("❌ 存档已损坏：JSON 解析失败 %s（本次按空档处理，不会覆写原文件）" % path)
 		return {}
 	return result

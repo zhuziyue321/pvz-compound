@@ -39,7 +39,7 @@ func save_user_names() -> void:
 	if err == OK:
 		Log.debug(str("✅ 当前用户已保存: ") + str(curr_user_name))
 	else:
-		push_error("❌ 保存当前用户失败: %s" % err)
+		Log.error("❌ 保存当前用户失败: %s" % err)
 
 ## 保证启动时至少有一个可用账号（在 load_current_user() 之后调用）：
 ## 没有任何账号时静默创建 DEFAULT_USER_NAME 并设为当前账号，跳过开始菜单的「创建用户」流程。
@@ -53,7 +53,7 @@ func ensure_default_user() -> bool:
 
 	var err_msg := add_user(DEFAULT_USER_NAME)
 	if not err_msg.is_empty():
-		push_error(str("❌ 创建默认账号失败: ") + err_msg)
+		Log.error(str("❌ 创建默认账号失败: ") + err_msg)
 		return false
 	set_current_user(DEFAULT_USER_NAME)
 	Log.debug(str("✅ 无账号，已静默创建默认账号: ") + DEFAULT_USER_NAME)
@@ -73,7 +73,7 @@ func ensure_save_directory_exists(user_name: String) -> void:
 		if err == OK:
 			Log.debug(str("✅ 创建存档文件夹成功：") + str(save_dir_path))
 		else:
-			push_error("❌ 创建存档文件夹失败，错误码：%s" % err)
+			Log.error("❌ 创建存档文件夹失败，错误码：%s" % err)
 	else:
 		Log.debug("存在存档文件")
 
@@ -164,7 +164,7 @@ func rename_user(old_name: String, new_name: String) -> String:
 func delete_folder(path: String) -> void:
 	var dir := DirAccess.open(path)
 	if dir == null:
-		push_error("无法打开目录: " + path)
+		Log.error("无法打开目录: " + path)
 		return
 
 	# 删除所有文件
@@ -172,7 +172,7 @@ func delete_folder(path: String) -> void:
 		var file_path := path.path_join(file)
 		var err := dir.remove(file_path)
 		if err != OK:
-			push_error("删除文件失败: " + file_path)
+			Log.error("删除文件失败: " + file_path)
 
 	# 删除所有子目录（递归）
 	for sub in dir.get_directories():

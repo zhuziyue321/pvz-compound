@@ -116,3 +116,43 @@
 
 **经验**：想换星形只改 `STAR_CELLS` 一张表就够了（越界坐标会被 `_resolve_star_cells()` 丢掉并打日志），
 但**探针里的点数常量不是自动同步的**，改完表一定跟着改 `STAR_CELL_NUM`。
+
+---
+
+## 补充（2026-10-06）：进度条换成观星口径（已种轮廓点 / 总数）
+
+1. 新增 `src/levels/mode_minigame/seeing_stars_progress_provider.gd`（`SeeingStarsProgressProvider`），
+   继承 `LevelProgressBattleProvider`，覆写 `get_progress()` / `is_bar_visible()` /
+   `get_flag_num()` / `take_flag_raise_index()`。
+   关卡脚本只要 `create_progress_provider()` 返回它的实例（一条钩子，本体零改动）。
+2. 进度本体仍在关卡脚本上（`star_cells` / `get_unplanted_num()`），数据源每帧读一次。
+3. **进度条不画旗帜**（`get_flag_num()` = 0）—— 见下面的追加修正。
+
+**踩坑**：
+
+1. 新建的 `.gd` 带 `class_name` 时，**直接 `run_autopilot.ps1` 会报
+   `Could not find type "SeeingStarsProgressProvider" in the current scope`** —— 全局类缓存
+   （`.godot/global_script_class_cache.cfg`）是编辑器扫描时才更新的，命令行跑游戏不会更新
+   → **正解**：先跑一次
+   `& '<godot.exe>' --headless --path '<工程>' --import`（顺带把 `.uid` 也生成了），再跑探针。
+2. `provider.is_bar_visible()` 在刚进 `MAIN_GAME` 那一刻仍是 false（要等开第一波
+   `is_wave_started` 才置位）→ 探针里这条断言**必须轮询等**（我第一轮就挂在只查一次）。
+
+**验证**：带窗口 `probe_seeing_stars`，25 条断言全过（`[SEESTARS] result=PASS failed=0`），
+新增 STEP2.5（数据源类型 / 不画旗帜 / 不升旗 / 开局 0% / 开战前不显示）与
+STEP5（开打后显示 / 种 1 个 = 1/13 / 全种满 = 100%）。
+
+---
+
+## 补充（2026-10-06 追加修正）：观星进度条不画旗帜
+
+上面第 1 条里最初写的是「旗帜沿用战斗口径、照旧画 4 面旗」，**已被推翻**：
+进度条既然被种植进度占满，再画 4 面旗会被读成「进度跟波次有关」——
+本关的 4 面旗帜只是「没种满就判负」的倒计时，归波次管，不占进度条。
+
+改法：`get_flag_num()` 返回 0（控制器收到 0 会清掉上一批旗帜）、`take_flag_raise_index()` 返回 -1。
+**继承 `LevelProgressBattleProvider` 只剩一个用途**：复用「开第一波之后才显示」
+（`is_bar_visible()` → `zombie_manager.is_battle_started()`）。
+
+连带：`docs/参考存档/特殊关卡.md` 观星表两处（轮廓点 **13 个** = 13 颗杨桃、星形图案换成 13 点那张）一并改正 ——
+那张表此前还停在老的 21 点五角星上。

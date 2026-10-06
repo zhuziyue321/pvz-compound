@@ -3,7 +3,7 @@ extends RefCounted
 ##
 ## 覆盖：
 ##   ① 关卡数据：屋顶场景 + 屋顶曲 Graze the Roof、**只有蹦蹦僵尸**的出怪表、
-##      30 波（原版 3 面旗帜）、没有蹦极、约 55 秒的超长开场、开局预置的花盆
+##      30 波（原版 3 面旗帜）、没有蹦极、约 55 秒的超长开场、开局铺下的花盆
 ##   ② 预览僵尸：清一色蹦蹦僵尸（开场那一眼就是本关的关键）
 ##   ③ 波次构成（直接问波次生成管理器，不依赖随机结果）：
 ##      · 非旗帜波 0~28：**全是**蹦蹦僵尸，一只别的都没有
@@ -48,15 +48,7 @@ func run(a) -> void:
 		para.first_wave_delay == EXPECT_FIRST_WAVE_DELAY, str(para.first_wave_delay))
 	_check(a, "没有蹦极僵尸偷植物", para.is_bungi == false, str(para.is_bungi))
 
-	var pot_num := 0
-	var pot_all_flower := true
-	for i in range(para.all_pre_plant_data.size()):
-		var pre: PrePlantResource = para.all_pre_plant_data[i]
-		pot_num += 1
-		if pre.plant_type != CharacterRegistry.PlantType.P034FlowerPot:
-			pot_all_flower = false
-	_check(a, "开局预置了 4 列花盆（屋顶得先有花盆才能种）", pot_num == 4, str(pot_num))
-	_check(a, "预置的全是花盆", pot_all_flower)
+	## 花盆不在关卡数据里了：由 run_flow() 开头的 plant_flower_pot_columns() 铺（见 STEP2.5）
 
 	# ---------------------------------------------- STEP2 进关卡
 	a.log("STEP2 进关卡（手里要有卡，免得被「种子包过少」自动跳过选卡）")
@@ -77,6 +69,18 @@ func run(a) -> void:
 		_finish(a)
 		return
 	var zm = mg.zombie_manager
+
+	# ---------------------------------------------- STEP2.5 屋顶花盆（流程种下，不在关卡数据里）
+	a.log("STEP2.5 左侧 4 列应已铺上花盆（屋顶得先有花盆才能种）")
+	var pot_num := 0
+	for i in range(20):
+		pot_num = _count_pots(mg, 4)
+		if pot_num > 0:
+			break
+		await a.wait(0.5)
+	_check(a, "左侧 4 列每行都铺上了花盆", pot_num == _row_num(mg) * 4, str(pot_num))
+	_check(a, "铺的全是花盆", _count_pots(mg, 4, true) == pot_num,
+		"%d / %d" % [_count_pots(mg, 4, true), pot_num])
 
 	# ---------------------------------------------- STEP3 预览僵尸
 	a.log("STEP3 预览僵尸应全是蹦蹦僵尸")
@@ -157,7 +161,9 @@ func run(a) -> void:
 
 	# ---------------------------------------------- STEP6 实机刷一波
 	a.log("STEP6 真刷一波出来，场上应全是蹦蹦僵尸")
-	zm.zombie_wave_manager.start_first_wave()
+	zm.zombie_wave_manager.start_next_wave()
+	zm.zombie_wave_manager.every_wave_progress_timer.start()
+	zm.zombie_wave_manager.is_wave_started = true
 	await a.wait(3.0)
 	var on_field: Dictionary = {}
 	for row in zm.all_zombies_2d:
@@ -175,6 +181,26 @@ func run(a) -> void:
 
 
 #region 工具
+## 数场上已铺的花盆：只数左侧 col_count 列的 Down 槽位
+## [only_flower] true = 只数植物类型是花盆的那些（用来验「铺的全是花盆」）
+func _count_pots(mg, col_count: int, only_flower := false) -> int:
+	var num := 0
+	for row_cells in mg.plant_cell_manager.all_plant_cells:
+		for col in range(mini(col_count, row_cells.size())):
+			var pot = (row_cells[col] as PlantCell).get_plant(CharacterRegistry.PlacePlantInCell.Down)
+			if not is_instance_valid(pot):
+				continue
+			if only_flower and pot.plant_type != CharacterRegistry.PlantType.P034FlowerPot:
+				continue
+			num += 1
+	return num
+
+
+## 草坪行数
+func _row_num(mg) -> int:
+	return mg.plant_cell_manager.all_plant_cells.size()
+
+
 ## 等主游戏推进到某个阶段
 func _wait_progress(a, mg, progress, timeout: float) -> bool:
 	var waited := 0.0

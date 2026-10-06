@@ -3,33 +3,8 @@ extends LevelScriptBase
 ##
 ## 关卡 = 属性（_init 里赋值）+ 流程（run_flow 一段顺序程序），不再有 .tres。
 ## 原 .tres 上的 timeline 事件数组已按原顺序平铺成 run_flow() 里的 await 序列。
-
-
-## 本关新手教程：在 run_flow() 里现场构造并传给 prefab.tutorial
-## （普通教程：写在这里只做登记，真正开跑在开战之后，见 TutorialManager）
-func _build_tutorial() -> ResourceTutorialData:
-	var tutorial_step_0 := ResourceTutorialStep.new()
-	tutorial_step_0.advice_text = "向日葵是非常重要的植物！"
-	tutorial_step_0.pointer_target = ResourceTutorialStep.E_PointerTarget.Card
-	tutorial_step_0.finish_type = ResourceTutorialStep.E_FinishType.TakeCard
-	tutorial_step_0.plant_type = CharacterRegistry.PlantType.P002SunFlower
-	var tutorial_step_1 := ResourceTutorialStep.new()
-	tutorial_step_1.advice_text = "点击草地种下你的种子！"
-	tutorial_step_1.pointer_target = ResourceTutorialStep.E_PointerTarget.Lawn
-	tutorial_step_1.finish_type = ResourceTutorialStep.E_FinishType.PlantCount
-	tutorial_step_1.plant_type = CharacterRegistry.PlantType.P002SunFlower
-	var tutorial_step_2 := ResourceTutorialStep.new()
-	tutorial_step_2.advice_text = "至少要种下三棵向日葵！"
-	tutorial_step_2.pointer_target = ResourceTutorialStep.E_PointerTarget.Card
-	tutorial_step_2.finish_type = ResourceTutorialStep.E_FinishType.PlantCount
-	tutorial_step_2.plant_type = CharacterRegistry.PlantType.P002SunFlower
-	tutorial_step_2.plant_count = 2
-	tutorial_step_2.start_zombie_wave = true
-	var tutorial_step_3 := ResourceTutorialStep.new()
-	tutorial_step_3.advice_text = "干得漂亮！"
-	var tutorial_data_0 := ResourceTutorialData.new()
-	tutorial_data_0.steps.assign([tutorial_step_0, tutorial_step_1, tutorial_step_2, tutorial_step_3])
-	return tutorial_data_0
+##
+## 本关教学（向日葵）就写在 run_flow() 里：提示条 + 箭头 + 等玩家操作，三样工具拼起来。
 
 
 func _init() -> void:
@@ -43,21 +18,44 @@ func run_flow(_mg: MainGameManager) -> void:
 	## 出怪表：本关多处要用同一份，抽成变量避免重复写
 	var zombie_list: Array[CharacterRegistry.ZombieType] = [CharacterRegistry.ZombieType.Z001Norm]
 
-	## 本关教程（登记：普通教程真正开跑在开战之后，见 TutorialManager）
-	await prefab.tutorial(_build_tutorial())
 	## 展示僵尸
-	await prefab.show_zombie(zombie_list)
+	await show_zombie(zombie_list)
 	## 选卡
-	await prefab.choose_card()
-	## 准备安放植物
+	await choose_card()
 	## 初始化小推车
-	await prefab.init_lawn_mover()
-	await prefab.ready_set_plant()
+	await init_lawn_mover()
+	## 准备安放植物（原版红字）
+	await ready_set_plant()
+	if not is_curr_level_success():
+		## 本关教学只在还没通关过 1-2 时播（原版教程只在冒险模式第一轮出现）
+		await _tutorial_flow()
 	## 开战：10 波，出怪表里只有普通僵尸
-	await prefab.start_battle(10, zombie_list)
+	await start_battle(10, zombie_list)
 
 
-## 本关有新手教程：教程在 run_flow() 里现场构造（见 _build_tutorial），
-## 这里只做声明 —— 供「要不要建 TutorialManager」判定用（见 should_run_tutorial）
-func has_tutorial() -> bool:
-	return true
+## 本关教学：教玩家种向日葵（顺序照搬原版 1-2）
+## （台词取自原版 ADVICE_* 条目，见 data/strings/lawn_strings.txt）
+func _tutorial_flow() -> void:
+	## 允许操作：先让玩家能点卡片 / 种植，此时还不出怪、不天降阳光
+	await allow_operation()
+	## 箭头指到向日葵的种子包上
+	await arrow_card(CharacterRegistry.PlantType.P002SunFlower)
+	await hint("向日葵是非常重要的植物！")
+	await wait_take_card(CharacterRegistry.PlantType.P002SunFlower)
+	## 教玩家把向日葵种下去
+	await hint("点击草地种下你的种子！")
+	await wait_plant(1, CharacterRegistry.PlantType.P002SunFlower)
+	## 再种两株，凑够三棵向日葵
+	## 教学排在开战之前，天降阳光还没启动，靠教程掉两颗阳光把这一段补上
+	## （原版这段教学与开战同时进行，玩家一边种一边收天上掉的阳光）
+	await arrow_card(CharacterRegistry.PlantType.P002SunFlower)
+	await hint("至少要种下三棵向日葵！")
+	await spawn_sun()
+	await spawn_sun()
+	await wait_plant(2, CharacterRegistry.PlantType.P002SunFlower)
+	await hide_arrow()
+	## 夸一句，停一停让玩家看清发生了什么
+	await hint("干得漂亮！")
+	await wait(2.0)
+	## 收尾：关掉提示条（箭头已经在上面收了）
+	await hint("")

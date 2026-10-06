@@ -54,17 +54,11 @@ func _ensure_can_attack_status_component() -> void:
 func spatter_all_area_enemy(direct_hit_enemy:Character000Base, lane:int=-1):
 	var areas = area_2d_spatter.get_overlapping_areas()
 	var all_splatter_enemy:Array[Character000Base] = []
-	## 僵王不是 Character000Base，单独结算（只在低头窗口里吃伤害）
-	var splatter_boss: ZombossBoss = null
+	## 僵王是正式角色（ZB000Base），与普通僵尸走同一条阵营 / 状态判定
 	for area in areas:
 		var enemy = area.owner
 		## 直接命中的目标不再重复结算（它的伤害由子弹本体结算）
 		if direct_hit_enemy == enemy:
-			continue
-		if enemy is ZombossBoss:
-			var boss: ZombossBoss = enemy
-			if boss.is_head_vulnerable:
-				splatter_boss = boss
 			continue
 		## 只溅射敌对阵营（同阵营由碰撞层先过滤，这里再判一次）
 		if not BulletCampConfig.is_enemy(bullet_camp, enemy):
@@ -74,7 +68,7 @@ func spatter_all_area_enemy(direct_hit_enemy:Character000Base, lane:int=-1):
 			continue
 
 		all_splatter_enemy.append(enemy)
-	var target_count := all_splatter_enemy.size() + (1 if splatter_boss != null else 0)
+	var target_count := all_splatter_enemy.size()
 	if target_count == 0:
 		return
 	var damage_per_enemy: int = clampi(int(float(sum_attack_value) / target_count), range_attack_value.x, range_attack_value.y)
@@ -82,8 +76,6 @@ func spatter_all_area_enemy(direct_hit_enemy:Character000Base, lane:int=-1):
 
 		if spatter_lane_up_down==-1 or lane==-1 or (lane+spatter_lane_up_down>=enemy.lane and lane-spatter_lane_up_down <=enemy.lane):
 			attack_enemy(enemy, damage_per_enemy)
-	if splatter_boss != null:
-		splatter_boss.be_attacked_bullet(damage_per_enemy, BulletRegistry.AttackMode.Penetration, false, false)
 
 
 ## 溅射伤害（旧名，保留兼容）→ 统一走 spatter_all_area_enemy

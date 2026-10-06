@@ -31,6 +31,7 @@
 [ext_resource type="FontFile" uid="uid://dqb8lum530s2f" path="res://assets/fonts/方正少儿_GBK.ttf" id="26_336fv"]
 [ext_resource type="Texture2D" uid="uid://b48l4yjq0j5mo" path="res://assets/image/ui/ui_main_game_menu/UI_BG/button_BG.png" id="30_nbi47"]
 [ext_resource type="BitMap" uid="uid://cxokl66i7qyda" path="res://assets/image/ui/ui_main_game_menu/UI_BG/button_BG_mask.png" id="31_56ytc"]
+[ext_resource type="Script" path="res://data/character/card/card_reference.gd" id="99_cardref"]
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_x628s"]
 texture = ExtResource("2_6irry")
@@ -57,6 +58,10 @@ expand_margin_left = 20.0
 expand_margin_right = 20.0
 expand_margin_bottom = 80.0
 
+[sub_resource type="Resource" id="CardRef_1"]
+script = ExtResource("99_cardref")
+card_type = 1
+content_id = 999
 [node name="CardSlotNorm" type="Control"]
 layout_mode = 3
 anchors_preset = 0
@@ -680,7 +685,7 @@ offset_right = 56.0
 offset_bottom = 82.0
 theme = null
 script = ExtResource("15_0r41g")
-card_plant_type = 999
+card_reference = SubResource("CardRef_1")
 curr_card_gb = 2
 cool_time = 0.0
 sun_cost = 0
